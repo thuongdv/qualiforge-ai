@@ -43,13 +43,13 @@ The goal is not simply to generate test cases using an LLM. The platform should 
 
 ### 2.1 Target users
 
-| User | Main responsibilities |
-|---|---|
-| QA Engineer | Create, review, and maintain test cases |
-| Automation Engineer | Generate and maintain automated tests |
-| Developer | Improve unit testing and code quality |
-| QA Lead / Test Manager | Manage testing workflows and quality metrics |
-| Project Manager | Monitor testing progress and execution |
+| User                   | Main responsibilities                                   |
+| ---------------------- | ------------------------------------------------------- |
+| QA Engineer            | Create, review, and maintain test cases                 |
+| Automation Engineer    | Generate and maintain automated tests                   |
+| Developer              | Improve unit testing and code quality                   |
+| QA Lead / Test Manager | Manage testing workflows and quality metrics            |
+| Project Manager        | Monitor testing progress and execution                  |
 | Platform Administrator | Configure integrations, models, agents, and permissions |
 
 ### 2.2 Initial use cases
@@ -105,18 +105,18 @@ The goal is not simply to generate test cases using an LLM. The platform should 
 
 The platform follows a modular service-oriented architecture.
 
-| Layer | Technology | Responsibility |
-|---|---|---|
-| Web application | Next.js + TypeScript | User interface and platform dashboard |
-| Backend API | Python + FastAPI | Business APIs, authentication integration, execution management |
-| Agent orchestration | Python + LangGraph | Multi-agent and workflow orchestration |
-| Knowledge system | Python | Ingestion, parsing, indexing, retrieval, context construction |
-| Relational database | PostgreSQL + pgvector | Platform data, knowledge metadata, vector search |
-| Queue / cache | Redis | Background task dispatching and caching |
-| Object storage | S3-compatible storage / MinIO | Documents, attachments, and snapshots |
-| AI observability | Langfuse + OpenTelemetry | LLM and agent tracing |
-| Infrastructure monitoring | Prometheus + Grafana | Service metrics and dashboards |
-| External systems | Jira, Xray, Confluence, GitHub | Enterprise integrations |
+| Layer                     | Technology                     | Responsibility                                                  |
+| ------------------------- | ------------------------------ | --------------------------------------------------------------- |
+| Web application           | Next.js + TypeScript           | User interface and platform dashboard                           |
+| Backend API               | Python + FastAPI               | Business APIs, authentication integration, execution management |
+| Agent orchestration       | Python + LangGraph             | Multi-agent and workflow orchestration                          |
+| Knowledge system          | Python                         | Ingestion, parsing, indexing, retrieval, context construction   |
+| Relational database       | PostgreSQL + pgvector          | Platform data, knowledge metadata, vector search                |
+| Queue / cache             | Redis                          | Background task dispatching and caching                         |
+| Object storage            | S3-compatible storage / MinIO  | Documents, attachments, and snapshots                           |
+| AI observability          | Langfuse + OpenTelemetry       | LLM and agent tracing                                           |
+| Infrastructure monitoring | Prometheus + Grafana           | Service metrics and dashboards                                  |
+| External systems          | Jira, Xray, Confluence, GitHub | Enterprise integrations                                         |
 
 ### 3.2 Logical architecture
 
@@ -222,21 +222,21 @@ This diagram describes logical responsibilities, not mandatory deployment bounda
 
 The following decisions represent the current proposed baseline. They are not all irreversible commitments.
 
-| Area | Proposed technology | Status |
-|---|---|---|
-| Frontend | Next.js + TypeScript | Proposed |
-| Backend API | FastAPI | Proposed |
-| Agent orchestration | LangGraph Python | Proposed |
-| Knowledge processing | Python | Proposed |
-| Database | PostgreSQL | Proposed |
-| Vector search | pgvector | Proposed for MVP |
-| Queue | Redis | Proposed |
-| Object storage | S3 / MinIO | Proposed |
-| LLM observability | Langfuse | Proposed |
-| Telemetry standard | OpenTelemetry | Proposed |
-| Infrastructure monitoring | Prometheus + Grafana | Proposed |
-| Containerization | Docker | Proposed |
-| CI/CD | GitHub Actions | Proposed |
+| Area                      | Proposed technology  | Status           |
+| ------------------------- | -------------------- | ---------------- |
+| Frontend                  | Next.js + TypeScript | Proposed         |
+| Backend API               | FastAPI              | Proposed         |
+| Agent orchestration       | LangGraph Python     | Proposed         |
+| Knowledge processing      | Python               | Proposed         |
+| Database                  | PostgreSQL           | Proposed         |
+| Vector search             | pgvector             | Proposed for MVP |
+| Queue                     | Redis                | Proposed         |
+| Object storage            | S3 / MinIO           | Proposed         |
+| LLM observability         | Langfuse             | Proposed         |
+| Telemetry standard        | OpenTelemetry        | Proposed         |
+| Infrastructure monitoring | Prometheus + Grafana | Proposed         |
+| Containerization          | Docker               | Proposed         |
+| CI/CD                     | GitHub Actions       | Proposed         |
 
 ### 4.1 Frontend: Next.js
 
@@ -341,13 +341,13 @@ It is a centralized knowledge access layer that synchronizes and indexes informa
 
 ### 5.2 Data sources
 
-| Source | Information |
-|---|---|
-| Jira | Epics, stories, requirements, acceptance criteria, comments |
-| Xray | Test cases, preconditions, test sets, test execution results |
-| Confluence | Product specifications, architecture documents, testing guidelines |
-| GitHub | Source code, pull requests, code documentation, unit tests |
-| File storage | PDF, Word, Excel, Markdown and other documents |
+| Source       | Information                                                        |
+| ------------ | ------------------------------------------------------------------ |
+| Jira         | Epics, stories, requirements, acceptance criteria, comments        |
+| Xray         | Test cases, preconditions, test sets, test execution results       |
+| Confluence   | Product specifications, architecture documents, testing guidelines |
+| GitHub       | Source code, pull requests, code documentation, unit tests         |
+| File storage | PDF, Word, Excel, Markdown and other documents                     |
 
 ### 5.3 Knowledge architecture
 
@@ -478,16 +478,16 @@ An agent should have a defined contract:
 
 ### 6.2 Initial agent catalog
 
-| Agent | Responsibility |
-|---|---|
-| Requirement Analyzer | Analyze requirements and acceptance criteria |
-| Knowledge Retriever | Find relevant project knowledge |
-| Test Designer | Generate test scenarios and test cases |
-| Test Reviewer | Review completeness, correctness, and duplicates |
-| Automation Feasibility Agent | Assess manual test automation feasibility |
-| Playwright Generator | Generate Playwright automation code |
-| Unit Test Generator | Generate unit tests from source code changes |
-| Unit Test Reviewer | Review generated unit tests |
+| Agent                        | Responsibility                                   |
+| ---------------------------- | ------------------------------------------------ |
+| Requirement Analyzer         | Analyze requirements and acceptance criteria     |
+| Knowledge Retriever          | Find relevant project knowledge                  |
+| Test Designer                | Generate test scenarios and test cases           |
+| Test Reviewer                | Review completeness, correctness, and duplicates |
+| Automation Feasibility Agent | Assess manual test automation feasibility        |
+| Playwright Generator         | Generate Playwright automation code              |
+| Unit Test Generator          | Generate unit tests from source code changes     |
+| Unit Test Reviewer           | Review generated unit tests                      |
 
 ### 6.3 Agent execution lifecycle
 
@@ -723,17 +723,17 @@ Use Docker Compose for local development and early MVP deployments.
 
 Suggested services:
 
-| Service | Container |
-|---|---|
-| Web | Next.js |
-| API | FastAPI |
-| Worker | Python + LangGraph |
-| Database | PostgreSQL + pgvector |
-| Queue | Redis |
-| Object storage | MinIO |
-| AI observability | Langfuse |
-| Metrics | Prometheus |
-| Dashboard | Grafana |
+| Service          | Container             |
+| ---------------- | --------------------- |
+| Web              | Next.js               |
+| API              | FastAPI               |
+| Worker           | Python + LangGraph    |
+| Database         | PostgreSQL + pgvector |
+| Queue            | Redis                 |
+| Object storage   | MinIO                 |
+| AI observability | Langfuse              |
+| Metrics          | Prometheus            |
+| Dashboard        | Grafana               |
 
 The API and worker may share Python application code while running as separate processes and containers.
 
@@ -902,18 +902,18 @@ The initial objective is to prove that a reliable, traceable, and useful AI test
 
 The following topics require review before implementation decisions are finalized.
 
-| ID | Topic | Current proposal | Status |
-|---|---|---|---|
-| ADR-001 | Frontend | Next.js + TypeScript | Proposed |
-| ADR-002 | Backend API | FastAPI | Proposed |
-| ADR-003 | Agent orchestration | LangGraph Python | Proposed |
-| ADR-004 | Database | PostgreSQL + pgvector | Proposed |
-| ADR-005 | Queue | Redis | Proposed |
-| ADR-006 | Knowledge retrieval | Hybrid retrieval + reranking | Proposed |
-| ADR-007 | AI observability | Langfuse + OpenTelemetry | Proposed |
-| ADR-008 | Infrastructure monitoring | Prometheus + Grafana | Proposed |
-| ADR-009 | Object storage | S3-compatible / MinIO | Proposed |
-| ADR-010 | Deployment | Docker Compose initially | Proposed |
+| ID      | Topic                     | Current proposal             | Status   |
+| ------- | ------------------------- | ---------------------------- | -------- |
+| ADR-001 | Frontend                  | Next.js + TypeScript         | Proposed |
+| ADR-002 | Backend API               | FastAPI                      | Proposed |
+| ADR-003 | Agent orchestration       | LangGraph Python             | Proposed |
+| ADR-004 | Database                  | PostgreSQL + pgvector        | Proposed |
+| ADR-005 | Queue                     | Redis                        | Proposed |
+| ADR-006 | Knowledge retrieval       | Hybrid retrieval + reranking | Proposed |
+| ADR-007 | AI observability          | Langfuse + OpenTelemetry     | Proposed |
+| ADR-008 | Infrastructure monitoring | Prometheus + Grafana         | Proposed |
+| ADR-009 | Object storage            | S3-compatible / MinIO        | Proposed |
+| ADR-010 | Deployment                | Docker Compose initially     | Proposed |
 
 ### Questions for architecture review
 

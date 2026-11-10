@@ -34,13 +34,17 @@ Focus on:
 ## Required output
 
 ### 1. Executive assessment
+
 Is this architecture suitable for the proposed product? Why or why not?
 
 ### 2. Architecture concerns
+
 Identify the most important weaknesses, risks, and missing components.
 
 ### 3. Technology evaluation
+
 For each major technology decision, provide:
+
 - Current proposal.
 - Alternative options.
 - Advantages and disadvantages.
@@ -48,19 +52,25 @@ For each major technology decision, provide:
 - Conditions that would change your recommendation.
 
 ### 4. Missing design decisions
+
 Identify decisions that must be made before MVP development.
 
 ### 5. Recommended architecture changes
+
 Provide specific changes, not just general suggestions.
 
 ### 6. MVP implementation plan
+
 Suggest an implementation sequence that minimizes technical risk.
 
 ### 7. Open questions
+
 List questions that the project owner must answer.
 
 ### 8. Final recommendation
+
 Classify your recommendations as:
+
 - Must change before MVP.
 - Should change soon.
 - Keep as proposed.
