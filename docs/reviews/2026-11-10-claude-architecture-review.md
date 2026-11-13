@@ -1,9 +1,9 @@
 # QualiForge AI — Architecture Review (Claude)
 
-**Reviewer:** Claude (Fable 5), acting as independent senior architect
-**Date:** 2026-11-10
-**Reviewed document:** `docs/architecture/ARCHITECTURE.md` v0.1.0
-**Review prompt:** `docs/prompts/ARCHITECTURE_DISCUSSION.prompt.md`
+**Reviewer:** Claude (Fable 5), acting as independent senior architect\
+**Date:** 2026-11-10\
+**Reviewed document:** `docs/architecture/ARCHITECTURE.md` v0.1.0\
+**Review prompt:** `docs/prompts/ARCHITECTURE_DISCUSSION.prompt.md`\
 **Status:** Review only. No architecture or source files were changed.
 
 ---
