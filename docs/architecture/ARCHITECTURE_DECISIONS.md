@@ -1,7 +1,7 @@
 # QualiForge AI — Architecture Decisions
 
-**Last updated:** 2026-11-10
-**Decided by:** Project owner
+**Last updated:** 2026-11-13\
+**Decided by:** Project owner\
 **Inputs:**
 
 - `docs/architecture/ARCHITECTURE.md` v0.1.0 (the proposal)
@@ -23,7 +23,7 @@ These facts shape every decision below.
 | Starting point | UC-01 (Jira story to reviewed test cases) already works as a Claude coding agent plus skills                                          |
 | Goal           | A shared application where the team runs workflows, sees inside each run, compares releases, and enriches a team-owned knowledge base |
 | Deployment     | Docker Compose on one internal server with 16 GB RAM and 100 GB disk                                                                  |
-| Data policy    | Jira and Confluence content may be sent to external LLM providers                                                                     |
+| Data policy    | Jira and Confluence content may be sent to external LLM providers and to Langfuse Cloud                                               |
 | Not a goal     | Multi-tenant SaaS, cloud scaling, more than about 10 users                                                                            |
 
 ---
@@ -81,9 +81,9 @@ Each decision lists where it came from: the Claude review, the Gemini review, bo
 
 ### ADR-007 — AI observability
 
-- **Decision:** Langfuse, self-hosted, is the only observability tool. It provides traces, token and cost figures, prompt versions, datasets, and comparison between releases. Each run links to its Langfuse trace. Step records (name, status, inputs, outputs, tokens) are also stored in PostgreSQL, so the run list and run view work when Langfuse is unavailable. No separate OpenTelemetry collector is deployed.
+- **Decision:** Langfuse is the only observability tool. The project starts on Langfuse Cloud (US region); self-hosting is decided later. It provides traces, token and cost figures, prompt versions, datasets, and comparison between releases. Each run links to its Langfuse trace. Step records (name, status, inputs, outputs, tokens) are also stored in PostgreSQL, so the run list and run view work when Langfuse is unavailable. No separate OpenTelemetry collector is deployed.
 - **Why:** Langfuse already covers run visibility and release comparison, two of the three problems the platform exists to solve. Building cost tables and comparison screens by hand would duplicate it.
-- **Condition:** Langfuse's documented minimums add up to about 25 GiB of RAM. Step 1 of the roadmap measures it on the 16 GB server. If it does not fit, the owner requests more memory.
+- **Condition:** Traces contain story text and generated tests, so they leave the internal network. The owner accepted this on 2026-11-13. Moving to self-hosting later means changing the base URL and keys; traces and datasets already in the cloud project do not move automatically. Self-hosted Langfuse recommends at least 16 GiB of memory for itself, which is the whole internal server, so self-hosting needs more memory or a second machine.
 - **Revisit when:** Not expected.
 - **Source:** Claude. Step records in PostgreSQL from both reviews. Gemini recommended making Langfuse optional; not adopted.
 
@@ -96,14 +96,14 @@ Each decision lists where it came from: the Claude review, the Gemini review, bo
 
 ### ADR-009 — Document storage and upload
 
-- **Decision:** Uploaded documents are stored through an S3-compatible interface. The application reuses the storage service that ships with the Langfuse stack, with its own bucket and credentials. Upload supports Markdown (`.md`) and text-based PDF (`.pdf`) first. Scanned PDFs are rejected with a clear message.
+- **Decision:** Uploaded documents are stored through an S3-compatible interface. The application runs its own S3-compatible storage container, added in step 4 of the roadmap when upload is built. Upload supports Markdown (`.md`) and text-based PDF (`.pdf`) first. Scanned PDFs are rejected with a clear message.
 - **Why:** Upload is a confirmed feature for enriching the knowledge base. Reusing the existing storage service adds no container. Scanned PDFs need OCR, which is separate work.
-- **Revisit when:** Langfuse moves off the server, or users need scanned documents or other file types.
+- **Revisit when:** Langfuse is self-hosted on the same server (its bundled storage could then be shared), or users need scanned documents or other file types.
 - **Source:** Claude and owner. Gemini recommended deferring storage; not adopted.
 
 ### ADR-010 — Deployment
 
-- **Decision:** Docker Compose on one internal server. The first compose file contains web, API, worker, PostgreSQL, and the Langfuse stack.
+- **Decision:** Docker Compose on one internal server. The first compose file contains web, API, worker, and PostgreSQL. Langfuse is not in it while the project uses Langfuse Cloud (ADR-007).
 - **Why:** It matches the confirmed environment and scale.
 - **Revisit when:** Not expected.
 - **Source:** Both reviews and owner.
@@ -174,7 +174,7 @@ Each decision lists where it came from: the Claude review, the Gemini review, bo
 ### ADR-020 — Order of work
 
 - **Decision:**
-  1. **Baseline.** Langfuse on the server with memory measured; the Claude workflow traced; the evaluation dataset built.
+  1. **Baseline.** The Claude workflow traced into Langfuse Cloud; the evaluation dataset built.
   2. **Walking skeleton.** Accounts, configuration page, run page, run list (completed, running, pending approval), UC-01 on LangGraph, approval, idempotent Jira test creation. Knowledge is the migrated skill content.
   3. **Feedback loop.** Capture of edits and rejections, review and approval of knowledge items, dataset re-run per release.
   4. **Retrieval and upload.** Upload and indexing of `.md` and text-based `.pdf` files; indexing of Confluence and existing tests, starting with duplicate detection.
@@ -208,10 +208,10 @@ Not part of the MVP. Each has a condition in the decision that would bring it ba
 
 These are assumptions, not decisions.
 
-1. Self-hosted Langfuse runs acceptably on the 16 GB server (ADR-007).
+1. The Langfuse Cloud plan in use covers the expected trace volume, retention, and number of team members (ADR-007).
 2. The Jira project does not require custom fields on Test issues that the platform does not yet supply (ADR-012).
 3. The LangGraph PostgreSQL checkpointer behaves as described for multi-day approval waits (ADR-003).
-4. The storage service bundled with Langfuse can be shared safely with the application (ADR-009).
+4. Company policy allows trace content on Langfuse Cloud in the US region for as long as the project stays there (ADR-007).
 5. Langfuse reports cost correctly for the chosen provider and model (ADR-017).
 
 ## Still to design

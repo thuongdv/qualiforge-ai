@@ -3,7 +3,7 @@
 **Document status:** Draft for architecture review  
 **Version:** 0.1.0  
 **Repository:** `qualiforge-ai`  
-**Purpose:** Shared architecture baseline for ChatGPT, Gemini/Antigravity, Claude Opus, and human contributors.
+**Purpose:** Shared architecture baseline for ChatGPT, Gemini/Antigravity, Claude, and human contributors.
 
 ---
 
