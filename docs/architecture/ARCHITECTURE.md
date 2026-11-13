@@ -125,7 +125,7 @@ flowchart TB
     USER[Platform Users]
 
     subgraph UI["Presentation Layer"]
-        WEB[Next.js Web Application]
+        WEB["Next.js Web Application"]
     end
 
     subgraph BACKEND["Backend Layer"]
@@ -152,9 +152,9 @@ flowchart TB
     end
 
     subgraph DATA["Data Layer"]
-        PG[(PostgreSQL + pgvector)]
+        PG[("PostgreSQL + pgvector")]
         REDIS[(Redis)]
-        OBJ[(S3 / MinIO)]
+        OBJ[("S3 / MinIO")]
     end
 
     subgraph EXTERNAL["External Systems"]
@@ -371,7 +371,7 @@ flowchart LR
     subgraph STORAGE["Knowledge Storage"]
         META[(PostgreSQL Metadata)]
         VECTOR[(pgvector)]
-        FILES[(S3 / MinIO)]
+        FILES[("S3 / MinIO")]
     end
 
     subgraph RETRIEVAL["Retrieval"]
@@ -540,7 +540,7 @@ flowchart TD
     HUMAN{Human approval}
     CREATE[Create Xray Tests]
     SAVE[Save execution results]
-    END([Completed])
+    DONE([Completed])
 
     START --> FETCH
     FETCH --> RETRIEVE
@@ -550,10 +550,10 @@ flowchart TD
     REVIEW --> DECISION
     DECISION -->|No| DESIGN
     DECISION -->|Yes| HUMAN
-    HUMAN -->|Rejected| END
+    HUMAN -->|Rejected| DONE
     HUMAN -->|Approved| CREATE
     CREATE --> SAVE
-    SAVE --> END
+    SAVE --> DONE
 ```
 
 ### 7.2 Workflow requirements
