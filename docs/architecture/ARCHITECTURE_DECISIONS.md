@@ -1,14 +1,15 @@
 # QualiForge AI — Architecture Decisions
 
-**Last updated:** 2026-11-13\
+**Last updated:** 2026-11-20\
 **Decided by:** Project owner\
+**Applied in:** `docs/architecture/ARCHITECTURE.md` v0.2.0 (ADR-001 to ADR-020)\
 **Inputs:**
 
 - `docs/architecture/ARCHITECTURE.md` v0.1.0 (the proposal)
 - `docs/reviews/2026-11-10-claude-architecture-review.md` (adopted as the plan)
 - `docs/reviews/2026-11-10-gemini-architecture-review.md` (selected points adopted)
 
-Where this file and `ARCHITECTURE.md` disagree, this file wins. `ARCHITECTURE.md` has not yet been updated to match.
+Where this file and `ARCHITECTURE.md` disagree, this file wins. A new or changed decision is applied to `ARCHITECTURE.md` with a version bump. Assumptions to validate and items still to design are in `docs/architecture/OPEN_QUESTIONS.md`.
 
 ---
 
@@ -97,9 +98,10 @@ Each decision lists where it came from: the Claude review, the Gemini review, bo
 ### ADR-009 — Document storage and upload
 
 - **Decision:** Uploaded documents are stored through an S3-compatible interface. The application runs its own S3-compatible storage container, added in step 4 of the roadmap when upload is built. Upload supports Markdown (`.md`) and text-based PDF (`.pdf`) first. Scanned PDFs are rejected with a clear message.
-- **Why:** Upload is a confirmed feature for enriching the knowledge base. Reusing the existing storage service adds no container. Scanned PDFs need OCR, which is separate work.
+- **Why:** Upload is a confirmed feature for enriching the knowledge base, and the S3 interface keeps a later move to other storage simple. While Langfuse runs on Langfuse Cloud (ADR-007), the server has no storage service to reuse, so the application runs its own. Adding it in step 4 keeps it out of the compose file until upload is built. Scanned PDFs need OCR, which is separate work.
 - **Revisit when:** Langfuse is self-hosted on the same server (its bundled storage could then be shared), or users need scanned documents or other file types.
-- **Source:** Claude and owner. Gemini recommended deferring storage; not adopted.
+- **Source:** Claude and owner. The Claude review proposed reusing the storage bundled with self-hosted Langfuse; that no longer applies since ADR-007 chose Langfuse Cloud. Gemini recommended deferring storage; not adopted.
+- **Changed:** 2026-11-20. The "Why" previously said the existing storage service was reused, which contradicted the decision.
 
 ### ADR-010 — Deployment
 
@@ -204,19 +206,6 @@ Not part of the MVP. Each has a condition in the decision that would bring it ba
 
 ---
 
-## To validate before or during implementation
+## Open questions
 
-These are assumptions, not decisions.
-
-1. The Langfuse Cloud plan in use covers the expected trace volume, retention, and number of team members (ADR-007).
-2. The Jira project does not require custom fields on Test issues that the platform does not yet supply (ADR-012).
-3. The LangGraph PostgreSQL checkpointer behaves as described for multi-day approval waits (ADR-003).
-4. Company policy allows trace content on Langfuse Cloud in the US region for as long as the project stays there (ADR-007).
-5. Langfuse reports cost correctly for the chosen provider and model (ADR-017).
-
-## Still to design
-
-- The database schema. The table diagram in section 4.3 of the Gemini review is the starting point, with knowledge item, feedback, and user tables added.
-- The description template for Test issues (ADR-012).
-- The pass criteria for the evaluation dataset (ADR-018).
-- Backup of the application database and the document bucket.
+Assumptions to validate, items still to design, and decisions still to take are kept in `docs/architecture/OPEN_QUESTIONS.md`.

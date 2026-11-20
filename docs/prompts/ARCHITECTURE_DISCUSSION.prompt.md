@@ -2,7 +2,9 @@
 
 You are acting as a Senior Software Architect reviewing the proposed architecture of QualiForge AI.
 
-Read `docs/architecture/ARCHITECTURE.md` completely before responding.
+Read `docs/architecture/ARCHITECTURE.md` and `docs/architecture/ARCHITECTURE_DECISIONS.md` completely before responding.
+
+Follow the rules in `docs/prompts/ARCHITECTURE_REVIEW_PROTOCOL.prompt.md`.
 
 ## Your responsibilities
 

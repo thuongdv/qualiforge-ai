@@ -7,6 +7,8 @@ Instructions for AI coding agents working in this repository.
 QualiForge AI is in the design phase. The repository holds Markdown documents only, under `docs/`:
 
 - `docs/architecture/ARCHITECTURE_DECISIONS.md` wins where it and `ARCHITECTURE.md` disagree.
+- `docs/architecture/ARCHITECTURE.md` is versioned. When you change it, bump the version in its header and add a row to its version history, following its "Versioning" table.
+- `docs/architecture/OPEN_QUESTIONS.md` holds what is not yet decided.
 - `docs/reviews/` holds dated architecture reviews, named `YYYY-MM-DD-<reviewer>-<topic>.md`.
 
 ## Markdown rules

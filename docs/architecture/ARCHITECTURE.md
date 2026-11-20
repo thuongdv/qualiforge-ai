@@ -1,41 +1,84 @@
 # QualiForge AI — Architecture Blueprint
 
-**Document status:** Draft for architecture review  
-**Version:** 0.1.0  
-**Repository:** `qualiforge-ai`  
-**Purpose:** Shared architecture baseline for ChatGPT, Gemini/Antigravity, Claude, and human contributors.
+**Version:** 0.2.0\
+**Last updated:** 2026-11-20\
+**Status:** Baseline with decisions ADR-001 to ADR-020 applied\
+**Repository:** `qualiforge-ai`\
+**Decisions:** `docs/architecture/ARCHITECTURE_DECISIONS.md`\
+**Open questions:** `docs/architecture/OPEN_QUESTIONS.md`\
+**Previous version:** 0.1.0, git tag `architecture-v0.1.0`
+
+---
+
+## How to read this document
+
+This document describes what QualiForge AI is and how it is built. `ARCHITECTURE_DECISIONS.md` records why: each decision there has its reasoning, its source, and the condition that would reopen it. Sections here cite decisions by ID instead of repeating the reasoning.
+
+Where the two documents disagree, `ARCHITECTURE_DECISIONS.md` wins, and the disagreement is a defect in this document.
+
+Items marked **Later** or **Deferred** are part of the long-term direction but not of the MVP. The deferred list, with the condition that brings each item back, is in the Deferred section of `ARCHITECTURE_DECISIONS.md`.
+
+### Versioning
+
+| Change                                                   | Version bump             |
+| -------------------------------------------------------- | ------------------------ |
+| Wording, typo, or diagram fix with no change in meaning  | Patch, for example 0.2.1 |
+| New or changed decisions applied to this document        | Minor, for example 0.3.0 |
+| Every item in section 15 (architecture readiness) is met | 1.0.0                    |
+| A later change that replaces a 1.x design                | Major, for example 2.0.0 |
+
+Each version adds a row to the history below. Once a version is merged to `main`, its commit is tagged `architecture-v<version>`, so documents that cite a version can be read as they were.
+
+### Version history
+
+| Version | Date       | Summary                                                                                                                                                                                                                                                                                                                                                    |
+| ------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.2.0   | 2026-11-20 | Applied ADR-001 to ADR-020. Added curated knowledge and the feedback loop, the run lifecycle, and the order of work. Removed Redis, Prometheus, Grafana, OpenTelemetry, the BFF option, and the provider layer from the MVP. Moved open questions to `OPEN_QUESTIONS.md` and the review protocol to `docs/prompts/ARCHITECTURE_REVIEW_PROTOCOL.prompt.md`. |
+| 0.1.0   | 2026-11-10 | First proposal, reviewed in `docs/reviews/2026-11-10-claude-architecture-review.md` and `docs/reviews/2026-11-10-gemini-architecture-review.md`.                                                                                                                                                                                                           |
 
 ---
 
 ## 1. Project Vision
 
-QualiForge AI is an AI-powered Quality Engineering platform designed to help software development and testing teams improve software quality through intelligent, context-aware AI agents.
+QualiForge AI is an AI-powered Quality Engineering platform that helps software testing teams improve software quality through context-aware AI agents.
 
-The platform connects software requirements, product documentation, test cases, source code, automation frameworks, and testing knowledge to support AI-driven testing workflows.
+The platform connects requirements, product documentation, test cases, and team testing knowledge to AI-driven testing workflows. The goal is not only to generate test cases with an LLM. It is a shared place where a team runs workflows, sees inside each run, compares releases, and turns reviewer corrections into knowledge that improves later runs.
 
-The goal is not simply to generate test cases using an LLM. The platform should provide an extensible environment where teams can configure, execute, monitor, evaluate, and improve AI agents and workflows throughout the software testing lifecycle.
+### 1.1 Problems the MVP solves
 
-### 1.1 Main objectives
+UC-01 (Jira story to reviewed test cases) already works today as a Claude coding agent plus skills, on one machine. The platform exists because that setup has four gaps:
 
-- Transform software testing from predominantly manual execution into AI-assisted Quality Engineering.
-- Connect knowledge from multiple enterprise systems.
-- Generate and review test cases using contextual product and testing knowledge.
-- Support multiple LLM providers and models.
-- Orchestrate multi-agent workflows with human approval.
-- Integrate with Jira, Xray, Confluence, GitHub, and CI/CD systems.
-- Monitor agent executions, token usage, cost, latency, and quality.
-- Provide traceability from requirements to generated tests and testing results.
-- Allow teams to extend the platform with new agents, tools, integrations, and workflows.
+1. The team cannot run the workflow from a shared place.
+2. A run cannot be inspected step by step.
+3. One release of the workflow cannot be compared with the last.
+4. The only way to improve the agent is to edit skills; reviewer corrections are lost.
 
-### 1.2 Guiding principles
+Langfuse covers the second and third (ADR-007). Curated knowledge and the feedback loop cover the fourth (ADR-011), and are the main reason for the platform.
 
-1. **Knowledge before generation:** Agents should use relevant and traceable project knowledge rather than rely only on their model's general knowledge.
-2. **Human-in-the-loop:** Important testing decisions and external system changes should support human review and approval.
-3. **Provider independence:** The architecture must not be tightly coupled to a single LLM provider.
-4. **Observable by design:** Every workflow, agent, LLM call, and tool invocation should be traceable.
-5. **Source of truth preservation:** Jira, Confluence, Xray, and GitHub remain authoritative for their respective data.
-6. **Modular architecture:** New agents, workflows, providers, and connectors should be added without redesigning the platform.
-7. **Security by design:** Permissions, data isolation, auditability, and sensitive-data handling are foundational requirements.
+### 1.2 Project context
+
+The platform is built by one SDET at about 20 hours per week, for an internal QA team of 5 to 10 people, on one internal server with Docker Compose. Multi-tenant SaaS, cloud scaling, and more than about 10 users are not goals. The full context table is in the Project context section of `ARCHITECTURE_DECISIONS.md`.
+
+### 1.3 Main objectives
+
+- Let the team run AI testing workflows from one shared application.
+- Generate and review test cases using project knowledge, not only the model's general knowledge.
+- Turn reviewer edits, rejections, and feedback into curated team knowledge.
+- Show what happened inside each run, with tokens, cost, and prompt versions.
+- Compare workflow releases on a fixed evaluation dataset.
+- Keep traceability from a Jira story to the test issues created from it.
+- **Later:** analyze existing tests, generate Playwright and unit tests, and integrate with Xray, GitHub, and CI/CD.
+
+### 1.4 Guiding principles
+
+1. **Knowledge before generation:** Agents use relevant, traceable project knowledge rather than only the model's general knowledge.
+2. **Knowledge grows from review:** Corrections made by reviewers become shared knowledge, not prompt edits.
+3. **Human-in-the-loop:** No AI output reaches an external system without human approval.
+4. **Provider independence:** The code is not tied to one LLM provider, without building a custom provider layer (ADR-017).
+5. **Observable by design:** Every run, step, and LLM call is traceable.
+6. **Source of truth preservation:** Jira and Confluence remain authoritative for their data.
+7. **Simplest architecture that fits the current scale:** Add a service only when a measured need appears. Each deferred item has a condition that brings it back.
+8. **Security by design:** Accounts, encrypted credentials, and write restrictions exist from the first version.
 
 ---
 
@@ -43,59 +86,60 @@ The goal is not simply to generate test cases using an LLM. The platform should 
 
 ### 2.1 Target users
 
-| User                   | Main responsibilities                                   |
-| ---------------------- | ------------------------------------------------------- |
-| QA Engineer            | Create, review, and maintain test cases                 |
-| Automation Engineer    | Generate and maintain automated tests                   |
-| Developer              | Improve unit testing and code quality                   |
-| QA Lead / Test Manager | Manage testing workflows and quality metrics            |
-| Project Manager        | Monitor testing progress and execution                  |
-| Platform Administrator | Configure integrations, models, agents, and permissions |
+| User                   | Main responsibilities                                    | Platform role |
+| ---------------------- | -------------------------------------------------------- | ------------- |
+| QA Engineer            | Run workflows; review, edit, and approve test cases      | Member        |
+| QA Lead / Test Manager | Follow runs, approve knowledge items, compare releases   | Member        |
+| Platform Administrator | Configure integrations and credentials, manage accounts  | Administrator |
+| Automation Engineer    | **Later:** generate and maintain automated tests (UC-03) | Member        |
+| Developer              | **Later:** improve unit tests (UC-04)                    | Member        |
 
-### 2.2 Initial use cases
+Roles are defined in ADR-015.
 
-**UC-01: Jira User Story to Test Cases**
+### 2.2 Use cases
 
-1. User selects a Jira user story.
-2. Platform retrieves the requirement and related information.
-3. Knowledge system retrieves relevant Confluence documentation, existing Xray tests, and testing guidelines.
-4. Requirement Analysis Agent analyzes the story.
-5. Test Design Agent generates test scenarios and test cases.
-6. Test Review Agent checks completeness, relevance, consistency, and duplicates.
-7. User reviews and approves the generated tests.
-8. Platform creates the approved tests in Xray.
-9. Execution history and cost are recorded.
+| ID    | Use case                                | Status                  |
+| ----- | --------------------------------------- | ----------------------- |
+| UC-01 | Jira user story to reviewed test cases  | MVP, steps 1 to 3       |
+| UC-02 | Existing test case analysis             | Later (ADR-020, step 5) |
+| UC-03 | Jira test case to Playwright automation | Later, needs a sandbox  |
+| UC-04 | Pull request unit test generation       | Later, needs a sandbox  |
+| UC-05 | Knowledge discovery                     | Not scheduled           |
 
-**UC-02: Existing Test Case Analysis**
+**UC-01: Jira user story to reviewed test cases**
 
-- Retrieve existing test cases from Xray.
-- Analyze duplicates, missing coverage, and quality issues.
-- Identify test cases that should be updated or removed.
-- Provide recommendations for human approval.
+1. A member starts a run on a Jira story.
+2. The platform fetches the story through the Jira API (ADR-006).
+3. The platform loads the approved knowledge items for the story's scope (ADR-011).
+4. From step 4 of the roadmap: related content is retrieved from the index, starting with existing tests for duplicate detection (ADR-006).
+5. The Requirement Analyzer, Test Designer, and Test Reviewer produce test cases. The reviewer can send work back to the designer at most twice (ADR-003).
+6. A reviewer decides each test case: approve, regenerate with feedback, or reject. Test cases can be edited inline (ADR-013).
+7. A deterministic step creates one Jira Test issue per approved test case, linked to the story (ADR-012, ADR-014).
+8. Edits, rejections, and feedback become proposed knowledge items (ADR-011).
+9. The run, its steps, and a link to its Langfuse trace are recorded (ADR-007).
 
-**UC-03: Jira Test Case to Playwright Automation**
+**UC-02: Existing test case analysis (Later)**
 
-- Retrieve an existing manual test case.
-- Evaluate automation feasibility.
-- Analyze the target application and existing automation framework.
-- Generate Playwright test code.
-- Run validation and review.
-- Create a pull request for human review.
+- Retrieve existing tests.
+- Find duplicates, missing coverage, and quality issues.
+- Recommend updates or removals for human approval.
 
-**UC-04: Pull Request Unit Test Generation**
+**UC-03: Jira test case to Playwright automation (Later)**
 
-- Detect changed production code.
-- Analyze code changes and existing unit tests.
-- Generate additional unit tests.
-- Run tests, linting, and coverage checks.
-- Evaluate test quality.
-- Publish the results or create a pull request.
+- Evaluate automation feasibility of a manual test.
+- Analyze the target application and the existing automation framework.
+- Generate Playwright code, run it, and open a pull request for review.
 
-**UC-05: Knowledge Discovery**
+UC-03 and UC-04 run generated code, so they need an isolated sandbox first.
 
-- Search across Jira, Confluence, Xray, and GitHub.
-- Retrieve relevant requirements, specifications, test cases, and implementation references.
-- Provide answers with source references and version information.
+**UC-04: Pull request unit test generation (Later)**
+
+- Analyze changed production code and its existing unit tests.
+- Generate unit tests, run them with linting and coverage, and publish the result.
+
+**UC-05: Knowledge discovery (Not scheduled)**
+
+- Search across indexed sources and answer with source references.
 
 ---
 
@@ -103,359 +147,221 @@ The goal is not simply to generate test cases using an LLM. The platform should 
 
 ### 3.1 Architecture overview
 
-The platform follows a modular service-oriented architecture.
+The platform is one web application and one Python application, deployed as containers on one server.
 
-| Layer                     | Technology                     | Responsibility                                                  |
-| ------------------------- | ------------------------------ | --------------------------------------------------------------- |
-| Web application           | Next.js + TypeScript           | User interface and platform dashboard                           |
-| Backend API               | Python + FastAPI               | Business APIs, authentication integration, execution management |
-| Agent orchestration       | Python + LangGraph             | Multi-agent and workflow orchestration                          |
-| Knowledge system          | Python                         | Ingestion, parsing, indexing, retrieval, context construction   |
-| Relational database       | PostgreSQL + pgvector          | Platform data, knowledge metadata, vector search                |
-| Queue / cache             | Redis                          | Background task dispatching and caching                         |
-| Object storage            | S3-compatible storage / MinIO  | Documents, attachments, and snapshots                           |
-| AI observability          | Langfuse + OpenTelemetry       | LLM and agent tracing                                           |
-| Infrastructure monitoring | Prometheus + Grafana           | Service metrics and dashboards                                  |
-| External systems          | Jira, Xray, Confluence, GitHub | Enterprise integrations                                         |
+| Component        | Technology                      | Responsibility                                                         | Decision         |
+| ---------------- | ------------------------------- | ---------------------------------------------------------------------- | ---------------- |
+| Web application  | Next.js + TypeScript            | User interface only; calls the API through a generated client          | ADR-001          |
+| API              | Python + FastAPI                | Accounts, runs, approvals, knowledge items, configuration              | ADR-002          |
+| Worker           | Python + LangGraph              | Executes runs; same package as the API, second entry point             | ADR-002, ADR-003 |
+| Database         | PostgreSQL + pgvector           | Business data, jobs table, LangGraph checkpoints, full-text and vector | ADR-004, ADR-005 |
+| Object storage   | S3-compatible container         | Uploaded documents; added in step 4                                    | ADR-009          |
+| AI observability | Langfuse Cloud                  | Traces, tokens, cost, prompt versions, datasets, release comparison    | ADR-007          |
+| External systems | Jira, Confluence, LLM providers | Source of stories and documents; target for Test issues                | ADR-006, ADR-012 |
 
 ### 3.2 Logical architecture
 
 ```mermaid
 flowchart TB
-    USER[Platform Users]
+    USER["Platform users"]
 
-    subgraph UI["Presentation Layer"]
-        WEB["Next.js Web Application"]
+    subgraph UI["Presentation"]
+        WEB["Next.js web application"]
     end
 
-    subgraph BACKEND["Backend Layer"]
-        API[FastAPI]
-        AUTH[Authentication and Authorization]
-        EXEC[Workflow Execution Management]
-        CONFIG[Agent and Model Configuration]
+    subgraph APP["Python application, one package"]
+        API["API entry point: FastAPI"]
+        WORKER["Worker entry point: LangGraph"]
     end
 
-    subgraph AGENT["AI Orchestration Layer"]
-        LG[LangGraph Runtime]
-        RA[Requirement Analyzer]
-        KD[Knowledge Retrieval]
-        TD[Test Designer]
-        TR[Test Reviewer]
-        CUSTOM[Custom Agents and Tools]
-    end
-
-    subgraph KNOWLEDGE["Knowledge Layer"]
-        ING[Ingestion and Synchronization]
-        PARSE[Document Parsing and Normalization]
-        RET[Hybrid Retrieval and Reranking]
-        CTX[Context Builder]
-    end
-
-    subgraph DATA["Data Layer"]
+    subgraph DATA["Data on the server"]
         PG[("PostgreSQL + pgvector")]
-        REDIS[(Redis)]
-        OBJ[("S3 / MinIO")]
+        OBJ[("S3-compatible storage, from step 4")]
     end
 
-    subgraph EXTERNAL["External Systems"]
+    subgraph EXT["External services"]
         JIRA[Jira]
-        XRAY[Xray]
         CONF[Confluence]
-        GIT[GitHub]
-        LLM[LLM Providers]
-    end
-
-    subgraph OBS["Observability"]
-        LF[Langfuse]
-        OTEL[OpenTelemetry]
-        PROM[Prometheus]
-        GRAF[Grafana]
+        LLM["LLM providers"]
+        LF["Langfuse Cloud"]
     end
 
     USER --> WEB
-    WEB --> API
-    API --> AUTH
-    API --> EXEC
-    API --> CONFIG
-    EXEC --> REDIS
-    REDIS --> LG
-
-    LG --> RA
-    LG --> KD
-    LG --> TD
-    LG --> TR
-    LG --> CUSTOM
-
-    KD --> RET
-    RET --> CTX
-    CTX --> PG
-
-    ING --> JIRA
-    ING --> XRAY
-    ING --> CONF
-    ING --> GIT
-    ING --> PARSE
-    PARSE --> PG
-    PARSE --> OBJ
-
-    RA --> LLM
-    TD --> LLM
-    TR --> LLM
-    CUSTOM --> LLM
-
-    LG --> JIRA
-    LG --> XRAY
-    LG --> GIT
-
-    API --> OTEL
-    LG --> OTEL
-    OTEL --> LF
-    OTEL --> PROM
-    PROM --> GRAF
+    WEB -->|"Generated TypeScript client"| API
+    API -->|"Runs, jobs, approvals, knowledge"| PG
+    API --> OBJ
+    WORKER -->|"Polls jobs; writes steps and checkpoints"| PG
+    WORKER --> OBJ
+    WORKER -->|"Reads stories; creates Test issues after approval"| JIRA
+    WORKER -->|"Nightly index, from step 4"| CONF
+    WORKER --> LLM
+    WORKER -->|"Traces"| LF
 ```
 
-This diagram describes logical responsibilities, not mandatory deployment boundaries. Some components can initially run in the same process or container.
+### 3.3 Responsibilities of the API and the worker
+
+The API owns everything a user acts on: accounts, credentials, runs, approvals, knowledge items, and the policy for writes to external systems. LangGraph owns the steps inside one run. The API never executes a workflow inside an HTTP request; it inserts a job and returns.
+
+Inside the Python package, the main modules are:
+
+| Module       | Contents                                                                    |
+| ------------ | --------------------------------------------------------------------------- |
+| Accounts     | Local accounts, roles, the single current-user function (ADR-015)           |
+| Integrations | Jira and Confluence clients, encrypted credential storage (ADR-016)         |
+| Runs         | Runs, steps, jobs table, approvals, test cases and their edits              |
+| Workflows    | LangGraph graphs and agents (ADR-003, ADR-019)                              |
+| Knowledge    | Curated knowledge items; from step 4, indexing and retrieval (ADR-006, 011) |
+
+Knowledge is a module of the application, not a separate service.
 
 ---
 
-## 4. Technology Decisions
+## 4. Technology Stack
 
-The following decisions represent the current proposed baseline. They are not all irreversible commitments.
-
-| Area                      | Proposed technology  | Status           |
-| ------------------------- | -------------------- | ---------------- |
-| Frontend                  | Next.js + TypeScript | Proposed         |
-| Backend API               | FastAPI              | Proposed         |
-| Agent orchestration       | LangGraph Python     | Proposed         |
-| Knowledge processing      | Python               | Proposed         |
-| Database                  | PostgreSQL           | Proposed         |
-| Vector search             | pgvector             | Proposed for MVP |
-| Queue                     | Redis                | Proposed         |
-| Object storage            | S3 / MinIO           | Proposed         |
-| LLM observability         | Langfuse             | Proposed         |
-| Telemetry standard        | OpenTelemetry        | Proposed         |
-| Infrastructure monitoring | Prometheus + Grafana | Proposed         |
-| Containerization          | Docker               | Proposed         |
-| CI/CD                     | GitHub Actions       | Proposed         |
+| Area                      | Technology                               | Status                    |
+| ------------------------- | ---------------------------------------- | ------------------------- |
+| Frontend                  | Next.js + TypeScript                     | Decided (ADR-001)         |
+| Backend API and worker    | FastAPI, one Python package              | Decided (ADR-002)         |
+| Agent orchestration       | LangGraph, PostgreSQL checkpointer       | Decided (ADR-003)         |
+| Database                  | PostgreSQL                               | Decided (ADR-004)         |
+| Search                    | pgvector and PostgreSQL full-text        | Decided (ADR-004)         |
+| Job dispatch              | PostgreSQL jobs table                    | Decided (ADR-005)         |
+| Object storage            | S3-compatible container                  | Decided, step 4 (ADR-009) |
+| LLM access                | LangGraph ecosystem chat model interface | Decided (ADR-017)         |
+| LLM observability         | Langfuse Cloud                           | Decided (ADR-007)         |
+| Infrastructure monitoring | Container health checks and logs         | Decided (ADR-008)         |
+| Containerization          | Docker Compose                           | Decided (ADR-010)         |
+| CI/CD                     | GitHub Actions                           | Proposed                  |
+| Queue                     | Redis                                    | Deferred (ADR-005)        |
+| Telemetry                 | Separate OpenTelemetry collector         | Not used (ADR-007)        |
+| Metrics and dashboards    | Prometheus + Grafana                     | Deferred (ADR-008)        |
 
 ### 4.1 Frontend: Next.js
 
-Responsibilities:
+Next.js is the presentation layer only. It holds no business logic and is not a backend-for-frontend. It calls FastAPI through a TypeScript client generated from the OpenAPI specification, so the build fails when the two disagree (ADR-001).
 
-- Platform dashboard.
-- Project and workspace management.
-- Agent and workflow configuration.
-- Workflow execution interface.
-- Execution history and trace visualization.
-- Human approval and review interfaces.
-- Cost and quality reports.
-- Integration configuration.
+MVP screens:
 
-The frontend must not contain long-running AI execution logic.
+- Sign-in and account administration.
+- Integration configuration (administrators only).
+- Run list: completed, running, and waiting for approval.
+- Run page: steps, status, and a link to the Langfuse trace.
+- Approval: per test case review, inline edit, approve, regenerate with feedback, reject.
+- Knowledge items: review and approval of proposed items (step 3).
+- Document upload (step 4).
 
-Use Next.js as the presentation layer and optionally as a Backend-for-Frontend (BFF) where useful. FastAPI remains the primary backend business API.
+Trace, cost, and release comparison views are not rebuilt; the platform links to Langfuse.
 
 ### 4.2 Backend: FastAPI
 
-Responsibilities:
-
-- REST APIs.
-- Authentication and authorization integration.
-- Project and workspace management.
-- Agent and workflow configuration.
-- Workflow execution lifecycle.
-- Integration management.
-- Execution status and result APIs.
-- Usage and cost aggregation APIs.
-- Audit records.
-
-FastAPI should enqueue long-running executions rather than execute the complete workflow inside an HTTP request.
-
-Generate a TypeScript client from the FastAPI OpenAPI specification to maintain frontend/backend contract consistency.
-
-### 4.3 Agent orchestration: LangGraph Python
-
-LangGraph is the proposed orchestration framework.
+All Python code is one package with two entry points, the API and the worker (ADR-002). They share models and database access.
 
 Responsibilities:
 
-- Workflow state management.
-- Agent execution.
-- Conditional routing.
-- Tool invocation.
-- Retry and error handling.
-- Checkpointing.
-- Human-in-the-loop approval.
-- Streaming execution events.
-- Multi-agent coordination.
+- REST API and OpenAPI specification.
+- Authentication and roles.
+- Run lifecycle: create, queue, cancel, resume after approval.
+- Approval records and test case edits.
+- Knowledge items.
+- Integration configuration and credential encryption.
+- Audit fields: who started, who approved, who authored.
 
-Agents should be reusable components. Workflows should compose agents rather than duplicate their implementations.
+### 4.3 Agent orchestration: LangGraph
 
-Do not make every task an autonomous multi-agent workflow. Prefer deterministic code and direct API calls when they are sufficient.
+Workflows are fixed LangGraph graphs with explicit edges. No agent chooses another agent. The checkpointer stores state in PostgreSQL, so an approval can wait for days without holding a worker (ADR-003).
 
-### 4.4 LLM provider abstraction
+Prefer deterministic code and direct API calls where they are enough. An LLM step is used only for interpretation, design, and review.
 
-The platform should support multiple providers.
+### 4.4 LLM providers
 
-Potential providers:
-
-- OpenAI
-- Anthropic
-- Google Gemini
-- DeepSeek
-- Other compatible providers
-
-Requirements:
-
-- Centralized provider configuration.
-- Model selection by workflow or agent.
-- Secure API key management.
-- Token usage collection.
-- Cost calculation.
-- Timeout and retry policies.
-- Model fallback policies where appropriate.
-- Provider-specific capabilities exposed through a normalized interface.
-
-The platform must not assume that all providers return identical usage fields or support identical capabilities.
+There is no custom provider abstraction and no proxy. The platform uses the chat model interface from the LangGraph ecosystem, with one primary provider and one fallback. Token and cost figures come from Langfuse (ADR-017).
 
 ### 4.5 Observability
 
-Proposed stack:
-
-- Langfuse: LLM and agent traces, prompt versions, token usage, cost, latency, and evaluation.
-- OpenTelemetry: distributed tracing and standardized telemetry.
-- Prometheus: application and infrastructure metrics.
-- Grafana: dashboards and alerts.
-
-Every workflow execution should have a traceable relationship to its child agent executions, LLM calls, retrieval operations, and tool calls.
+Langfuse Cloud is the only observability tool. Section 8 describes what is recorded.
 
 ---
 
-## 5. Knowledge System and RAG Architecture
+## 5. Knowledge System
 
-### 5.1 Core principle
+### 5.1 Two kinds of knowledge
 
-The Knowledge System is not simply a vector database.
+| Kind                      | What it is                                                         | How a run gets it                           | When built   |
+| ------------------------- | ------------------------------------------------------------------ | ------------------------------------------- | ------------ |
+| Curated knowledge items   | Small, team-written rules and corrections, with author and version | Injected by scope, without vector search    | Steps 2 to 3 |
+| Indexed reference content | Confluence pages, existing tests, uploaded documents               | Retrieved by search to find related content | Step 4       |
 
-It is a centralized knowledge access layer that synchronizes and indexes information from external systems while preserving the original systems as sources of truth.
+A record whose ID is already known, such as the Jira story a run starts from, is always fetched through the source system's API. Retrieval is used only to discover related content (ADR-006).
 
-### 5.2 Data sources
+### 5.2 Curated knowledge and the feedback loop
 
-| Source       | Information                                                        |
-| ------------ | ------------------------------------------------------------------ |
-| Jira         | Epics, stories, requirements, acceptance criteria, comments        |
-| Xray         | Test cases, preconditions, test sets, test execution results       |
-| Confluence   | Product specifications, architecture documents, testing guidelines |
-| GitHub       | Source code, pull requests, code documentation, unit tests         |
-| File storage | PDF, Word, Excel, Markdown and other documents                     |
-
-### 5.3 Knowledge architecture
+This is the main reason for the platform (ADR-011).
 
 ```mermaid
 flowchart LR
-    subgraph SOURCES["External Sources"]
-        J[Jira]
-        X[Xray]
-        C[Confluence]
-        G[GitHub]
-        F[Files]
-    end
+    SKILLS["Existing skills, migrated as seed items"]
+    RUN["Run on a Jira story"]
+    REVIEWER["Reviewer edits, rejects, or asks to regenerate, with a reason"]
+    PROPOSED["Proposed knowledge item"]
+    TEAM["Team review"]
+    APPROVED["Approved knowledge item"]
 
-    subgraph INGESTION["Ingestion"]
-        SYNC[Connectors and Sync]
-        NORMAL[Normalization]
-        PARSE[Parsing and Chunking]
-        EMBED[Embedding Generation]
-    end
-
-    subgraph STORAGE["Knowledge Storage"]
-        META[(PostgreSQL Metadata)]
-        VECTOR[(pgvector)]
-        FILES[("S3 / MinIO")]
-    end
-
-    subgraph RETRIEVAL["Retrieval"]
-        API[Knowledge API]
-        HYBRID[Hybrid Search]
-        RERANK[Reranking]
-        CONTEXT[Context Builder]
-    end
-
-    J --> SYNC
-    X --> SYNC
-    C --> SYNC
-    G --> SYNC
-    F --> SYNC
-
-    SYNC --> NORMAL
-    NORMAL --> PARSE
-    PARSE --> EMBED
-    PARSE --> META
-    PARSE --> FILES
-    EMBED --> VECTOR
-
-    API --> META
-    API --> HYBRID
-    HYBRID --> VECTOR
-    HYBRID --> RERANK
-    RERANK --> CONTEXT
+    SKILLS --> APPROVED
+    APPROVED -->|"Injected by project or component scope"| RUN
+    RUN --> REVIEWER
+    REVIEWER --> PROPOSED
+    PROPOSED --> TEAM
+    TEAM -->|"Approve"| APPROVED
 ```
 
-### 5.4 Storage strategy
+Each knowledge item records:
 
-Use PostgreSQL for:
+- Scope: project or component.
+- Author.
+- Status: proposed or approved.
+- Version.
+- Origin: the run or the uploaded document it came from.
 
-- Canonical knowledge records.
-- Source metadata.
-- Document relationships.
-- Version information.
-- Permissions and access metadata.
-- Chunk metadata.
-- Embedding references.
-- Synchronization state.
+When approved items become too many to inject by scope, they move into retrieval.
 
-Use pgvector for:
+### 5.3 Indexed reference content (step 4)
 
-- Embedding storage.
-- Semantic similarity search.
+| Source                    | Content                                  | How it enters the index       |
+| ------------------------- | ---------------------------------------- | ----------------------------- |
+| Jira                      | Stories and existing Test issues         | Allowlisted projects, nightly |
+| Confluence                | Specifications and testing guidelines    | Allowlisted spaces, nightly   |
+| Uploaded documents        | `.md` and text-based `.pdf` files        | On upload                     |
+| Xray, GitHub, other files | Test sets, executions, code, Word, Excel | Deferred                      |
 
-Use S3 / MinIO for:
+Rules:
 
-- Original documents.
-- Attachments.
-- Document snapshots.
-- Large extracted artifacts.
+- Indexed sources are an explicit allowlist of Jira projects and Confluence spaces.
+- The allowlist is re-indexed in full every night. A content hash skips re-embedding of unchanged documents. Deleted documents disappear at the next re-index.
+- Scanned PDFs are rejected with a clear message (ADR-009).
+- There is no per-user permission filtering. Access goes through shared credentials, so every platform user can see everything the configured credentials can see (ADR-016).
+- Atlassian Cloud cannot deliver webhooks to the internal server, so there is no webhook sync.
 
-### 5.5 Retrieval strategy
+The first use of retrieval is duplicate detection against existing tests. Retrieval is extended only where the evaluation shows a gap that curated knowledge does not fill.
 
-Implement hybrid retrieval:
+### 5.4 Storage
+
+| Store                 | Holds                                                                       |
+| --------------------- | --------------------------------------------------------------------------- |
+| PostgreSQL            | Knowledge items, source metadata, chunks, content hashes, full-text indexes |
+| pgvector              | Chunk embeddings                                                            |
+| S3-compatible storage | Original uploaded files                                                     |
+
+### 5.5 Retrieval
+
+From step 4, retrieval combines:
 
 1. Exact identifier lookup.
-2. Keyword/full-text search.
-3. Semantic vector search.
-4. Metadata and permission filtering.
-5. Reranking.
-6. Context construction.
+2. PostgreSQL full-text search.
+3. pgvector semantic search.
+4. Metadata filtering, such as project and source.
+5. Context construction for the prompt.
 
-Important rule:
-
-**Use direct APIs when the target record is already known. Use RAG when discovering relevant related knowledge.**
-
-For example, when a user selects `PROJ-123`, retrieve that Jira issue directly through the Jira connector. Use RAG to discover related Confluence documentation, existing Xray tests, and testing guidelines.
-
-### 5.6 Knowledge synchronization
-
-Support:
-
-- Initial full synchronization.
-- Incremental synchronization.
-- Webhook-driven updates when available.
-- Scheduled reconciliation.
-- Deletion and permission-change propagation.
-- Version tracking.
-- Sync failure monitoring.
-
-Permission filtering must occur before retrieved content is exposed to an agent or user. Do not rely solely on filtering results in the frontend.
+Reranking is deferred.
 
 ---
 
@@ -463,554 +369,363 @@ Permission filtering must occur before retrieved content is exposed to an agent 
 
 ### 6.1 Agent design
 
-An agent should have a defined contract:
+An agent is a Python module (ADR-019). Each agent defines:
 
-- Unique identifier.
 - Name and description.
-- Input schema.
-- Output schema.
-- Instructions and prompt version.
-- Tools and permissions.
+- Input and output schema.
+- Prompt, managed in Langfuse by name and version.
 - Model configuration.
-- Timeout and retry policies.
-- Evaluation criteria.
-- Version.
+- Tools. LLM steps get read-only tools; they never write to external systems (ADR-014).
+- Timeout and retry policy.
 
-### 6.2 Initial agent catalog
+An agent's version is the git commit plus the Langfuse prompt version. Both are recorded on each run. There are no agent or workflow registries in the MVP.
 
-| Agent                        | Responsibility                                   |
-| ---------------------------- | ------------------------------------------------ |
-| Requirement Analyzer         | Analyze requirements and acceptance criteria     |
-| Knowledge Retriever          | Find relevant project knowledge                  |
-| Test Designer                | Generate test scenarios and test cases           |
-| Test Reviewer                | Review completeness, correctness, and duplicates |
-| Automation Feasibility Agent | Assess manual test automation feasibility        |
-| Playwright Generator         | Generate Playwright automation code              |
-| Unit Test Generator          | Generate unit tests from source code changes     |
-| Unit Test Reviewer           | Review generated unit tests                      |
+### 6.2 Agent catalog
 
-### 6.3 Agent execution lifecycle
+| Agent                        | Responsibility                                  | Status |
+| ---------------------------- | ----------------------------------------------- | ------ |
+| Requirement Analyzer         | Analyze the story and its acceptance criteria   | MVP    |
+| Test Designer                | Design test scenarios and test cases            | MVP    |
+| Test Reviewer                | Check completeness, correctness, and duplicates | MVP    |
+| Automation Feasibility Agent | Assess whether a manual test can be automated   | Later  |
+| Playwright Generator         | Generate Playwright automation code             | Later  |
+| Unit Test Generator          | Generate unit tests from code changes           | Later  |
+| Unit Test Reviewer           | Review generated unit tests                     | Later  |
+
+Loading knowledge items and retrieving related content are deterministic steps, not agents.
+
+### 6.3 Run lifecycle
+
+A run is one execution of one workflow on one Jira story, started by one member.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Pending
-    Pending --> Queued
+    [*] --> Queued
     Queued --> Running
     Running --> WaitingForApproval
     Running --> Completed
     Running --> Failed
-    Running --> Cancelled
-    WaitingForApproval --> Running: Approved
-    WaitingForApproval --> Cancelled: Rejected
+    WaitingForApproval --> Queued: Decisions submitted
     Failed --> Queued: Retry
+    Queued --> Cancelled
+    Running --> Cancelled
+    WaitingForApproval --> Cancelled
     Completed --> [*]
     Cancelled --> [*]
 ```
 
-The execution model must support:
+The execution model provides:
 
-- Asynchronous execution.
-- Status updates.
-- Progress events.
-- Checkpoint persistence.
-- Retry and recovery.
+- Asynchronous execution through the jobs table (ADR-005).
+- Checkpoints in PostgreSQL; a worker restart resumes the run from its last checkpoint.
+- An approval wait that holds no worker and no HTTP request, for as long as it takes.
+- Run duration that excludes time spent waiting for approval (ADR-013).
+- Retries that never duplicate Jira writes (ADR-014).
 - Cancellation.
-- Human approval.
-- Execution history.
-
-A human approval wait may last much longer than an ordinary worker task. The design must not depend on holding an HTTP request or a worker process open while waiting.
+- A step record for each step (section 8.2).
 
 ---
 
 ## 7. Workflow Architecture
 
-A workflow is a versioned composition of agents, tools, conditions, and approval steps.
+A workflow is a fixed LangGraph graph, versioned with the code.
 
-### 7.1 Example: Jira Story to Xray Tests
+### 7.1 UC-01: Jira story to Jira Test issues
 
 ```mermaid
 flowchart TD
-    START([User selects Jira story])
-    FETCH[Fetch Jira Story]
-    RETRIEVE[Retrieve Related Knowledge]
-    ANALYZE[Requirement Analyzer]
-    DESIGN[Test Designer]
-    REVIEW[Test Reviewer]
-    DECISION{Review passed?}
-    HUMAN{Human approval}
-    CREATE[Create Xray Tests]
-    SAVE[Save execution results]
-    DONE([Completed])
+    START(["Member starts a run on a Jira story"])
+    FETCH["Fetch the story through the Jira API"]
+    KNOW["Load approved knowledge items for the scope"]
+    RETRIEVE["Retrieve related content, from step 4"]
+    ANALYZE["Requirement Analyzer"]
+    DESIGN["Test Designer"]
+    REVIEW["Test Reviewer"]
+    PASSED{"Review passed?"}
+    CAP{"Fewer than 2 revisions?"}
+    HUMAN{"Reviewer decides each test case"}
+    CREATE["Create Jira Test issues: deterministic, idempotent"]
+    FEEDBACK["Record edits, rejections, and feedback as proposed knowledge items"]
+    DONE(["Completed"])
 
     START --> FETCH
-    FETCH --> RETRIEVE
+    FETCH --> KNOW
+    KNOW --> RETRIEVE
     RETRIEVE --> ANALYZE
     ANALYZE --> DESIGN
     DESIGN --> REVIEW
-    REVIEW --> DECISION
-    DECISION -->|No| DESIGN
-    DECISION -->|Yes| HUMAN
-    HUMAN -->|Rejected| DONE
-    HUMAN -->|Approved| CREATE
-    CREATE --> SAVE
-    SAVE --> DONE
+    REVIEW --> PASSED
+    PASSED -->|"Yes"| HUMAN
+    PASSED -->|"No"| CAP
+    CAP -->|"Yes"| DESIGN
+    CAP -->|"No, warnings attached"| HUMAN
+    HUMAN -->|"Regenerate with feedback"| DESIGN
+    HUMAN -->|"Approved test cases"| CREATE
+    HUMAN -->|"Rejected test cases"| FEEDBACK
+    CREATE --> FEEDBACK
+    FEEDBACK --> DONE
 ```
 
-### 7.2 Workflow requirements
+### 7.2 Workflow rules
 
-- Versioned workflow definitions.
-- Configurable agents and model selection.
-- Input and output schemas.
-- Conditional routing.
-- Retry policies.
-- Human approval nodes.
-- Execution cancellation.
-- Execution history.
-- Traceability.
-- Cost and token aggregation.
+- Fixed graphs with explicit edges. No agent chooses another agent (ADR-003).
+- The reviewer-to-designer loop is capped at 2 revisions. After that the run goes to human approval with the reviewer's warnings attached.
+- Approval is per test case. The original and the edited version of each test case are both stored (ADR-013).
+- Workflow version is the git commit plus the prompt versions used (ADR-019).
 
-### 7.3 Deterministic versus agentic execution
+### 7.3 Deterministic versus agentic steps
 
-Prefer deterministic application logic for:
+Deterministic code is used for:
 
 - Fetching Jira issues by ID.
-- Creating Xray test cases.
+- Loading knowledge items.
 - Validating schemas.
-- Checking permissions.
-- Persisting execution records.
-- Enforcing approval policies.
+- Checking roles and approval state.
+- Creating Jira Test issues.
+- Persisting run and step records.
 
-Use LLM-based agents for:
+LLM steps are used for:
 
 - Requirement interpretation.
-- Knowledge synthesis.
 - Test design.
 - Semantic review.
-- Code analysis.
 
-This separation improves predictability, security, and cost control.
+LLM steps have no write tools. Writes to Jira happen only in a deterministic step after human approval. This is the practical defence against prompt injection from retrieved or uploaded content (ADR-014).
+
+### 7.4 Jira Test issues
+
+The MVP writes generated tests as Jira issues of type Test, linked to the user story. The Xray API is not used (ADR-012).
+
+- Steps go in the issue description, in Atlassian Document Format, following one fixed template with bold section headings such as **Preconditions** and **Steps**. A later move to Xray steps can parse it.
+- Labels identify the origin: `qualiforge`, `llm-provider-<provider>`, `llm-model-<name>`.
+- The description carries the run ID, the approving user, and a link to the run.
+- Each test case has an idempotency key and stores the Jira key it produced. A retry creates only the test issues not yet created (ADR-014).
+
+The description template is still to be designed (`OPEN_QUESTIONS.md`).
 
 ---
 
-## 8. AI Observability and Cost Management
+## 8. AI Observability and Evaluation
 
-### 8.1 Monitoring hierarchy
+### 8.1 Where data lives
+
+| Data                                                 | Store          |
+| ---------------------------------------------------- | -------------- |
+| Runs, steps, approvals, test cases, knowledge items  | PostgreSQL     |
+| Step records: name, status, inputs, outputs, tokens  | PostgreSQL     |
+| Full traces, token and cost figures, prompt versions | Langfuse Cloud |
+| Evaluation datasets and release comparisons          | Langfuse Cloud |
+
+PostgreSQL is the source of truth for business state. The run list and run page work when Langfuse is unavailable. Each run links to its Langfuse trace (ADR-007).
+
+### 8.2 Monitoring hierarchy
 
 ```text
-Workflow Execution
-  ├── Agent Execution
-  │     ├── LLM Call
-  │     ├── Tool Call
-  │     └── Retrieval Operation
-  └── Workflow Summary
+Run
+  ├── Step
+  │     ├── LLM call
+  │     ├── Tool call
+  │     └── Retrieval operation (from step 4)
+  └── Run summary
 ```
 
-### 8.2 Required telemetry
+Recorded per level:
 
-**Workflow level**
+- **Run:** run ID, workflow and version, story key, member, start and end time, duration excluding approval wait, status, total tokens, estimated cost, retry count, Langfuse trace link.
+- **Step:** name, status, inputs, outputs, tokens, duration.
+- **LLM call (Langfuse):** provider, model, prompt version, input and output tokens, latency, cost, errors.
+- **Retrieval (Langfuse, step 4):** query, retrieved document IDs, sources, scores, context size.
+- **Quality:** review acceptance rate, edit rate, rejection rate, duplicate rate, evaluation dataset score per release.
 
-- Execution ID.
-- Workflow name and version.
-- User and project references.
-- Start and end time.
-- Duration.
-- Status.
-- Total tokens.
-- Total estimated cost.
-- Error and retry counts.
+### 8.3 Baseline and evaluation
 
-**Agent level**
+The existing Claude-based workflow is the baseline (ADR-018).
 
-- Agent name and version.
-- Input/output references.
-- Model used.
-- Duration.
-- Status.
-- Retry count.
-- LLM call count.
+1. Before the port, the existing workflow is traced into Langfuse.
+2. A dataset of 20 to 30 real stories with their accepted test cases is built.
+3. The LangGraph port must score at least as well as the baseline on that dataset.
+4. The dataset is re-run for each release, and grows over time.
 
-**LLM level**
+The pass criteria are still to be designed (`OPEN_QUESTIONS.md`).
 
-- Provider and model.
-- Prompt version.
-- Input/output tokens.
-- Cached and reasoning token usage when available.
-- Latency.
-- Estimated cost.
-- Provider request ID.
-- Error information.
+### 8.4 Trace data
 
-**RAG level**
+Traces contain story text and generated tests, so they leave the internal network. The owner accepted this on 2026-11-13 (ADR-007).
 
-- Search query.
-- Retrieved document identifiers.
-- Source systems.
-- Relevance scores.
-- Reranking results.
-- Retrieval latency.
-- Context size.
-- Document versions.
-
-**Quality level**
-
-- Requirement coverage.
-- Test relevance.
-- Duplicate test rate.
-- Review acceptance rate.
-- Human rejection rate.
-- Citation accuracy.
-- Retrieval evaluation metrics.
-
-### 8.3 Data ownership
-
-Langfuse should be used for detailed LLM and agent observability.
-
-PostgreSQL should remain the platform's business database, containing workflow executions, agent configurations, project data, approvals, and summarized usage records.
-
-Do not make Langfuse the only source of truth for business execution state.
-
-### 8.4 Security
-
-- Avoid storing secrets in prompts or traces.
-- Mask sensitive content.
-- Restrict access to prompts and model responses.
-- Define trace retention policies.
-- Separate tenant/project data.
-- Audit sensitive access.
-- Do not use high-cardinality identifiers as Prometheus metric labels.
+- Credentials are masked in traces (ADR-016).
+- Self-hosting Langfuse later means changing the base URL and keys; traces and datasets already in the cloud project do not move automatically.
 
 ---
 
 ## 9. Security and Governance
 
-Security requirements must be included from the first implementation phase.
+### 9.1 Authentication and roles
 
-### 9.1 Authentication and authorization
+Local accounts exist from the first version (ADR-015).
 
-- User authentication.
-- Role-based access control.
-- Project-level permissions.
-- Agent and workflow permissions.
-- Integration credentials management.
-- Audit logging.
+- Two roles: member and administrator. An administrator can promote other accounts.
+- The first administrator is created from environment variables on first start.
+- The system refuses to demote or delete the last administrator.
+- The API obtains the current user through one function, so the login method can be replaced in one place when a company identity provider arrives.
 
-### 9.2 Integration security
+### 9.2 Integration credentials
 
-- Secure storage of API credentials.
-- OAuth where supported.
-- Least-privilege integration scopes.
-- Credential rotation.
-- Webhook signature verification.
-- External API rate limiting.
+Jira and Confluence credentials are entered on a configuration page open to administrators only (ADR-016).
+
+- Encrypted at rest with a key supplied through the environment.
+- Never returned to the browser after saving.
+- Masked in traces.
+- Each integration has a "test connection" action.
+- The page states that every platform user can see everything the configured credentials can see.
+
+LLM provider and Langfuse keys are supplied through the environment.
 
 ### 9.3 AI governance
 
-- Human approval for external write operations.
-- Prompt and workflow versioning.
-- Traceability of AI-generated artifacts.
-- Configurable model usage policies.
-- Token and cost limits.
-- Input and output validation.
-- Protection against prompt injection from retrieved documents.
+- Human approval before any external write (ADR-013, ADR-014).
+- LLM steps have no write tools (ADR-014).
+- Idempotent writes to Jira (ADR-014).
+- Traceability from story to Test issue: run ID, approver, provider, and model on every issue (ADR-012).
+- Prompt and workflow versions recorded on every run (ADR-019).
+- Authorship and status recorded on every knowledge item (ADR-011).
+- Schema validation of LLM output before it is stored.
+
+**Deferred:** per-user access to source systems, project-level permissions, company single sign-on, per-team budgets.
 
 ---
 
 ## 10. Deployment Architecture
 
-### 10.1 Initial deployment
+### 10.1 Deployment
 
-Use Docker Compose for local development and early MVP deployments.
+Docker Compose on one internal server with 16 GB RAM and 100 GB disk (ADR-010).
 
-Suggested services:
+| Service        | Container                | From   |
+| -------------- | ------------------------ | ------ |
+| Web            | Next.js                  | Step 2 |
+| API            | FastAPI                  | Step 2 |
+| Worker         | Same image, worker entry | Step 2 |
+| Database       | PostgreSQL + pgvector    | Step 2 |
+| Object storage | S3-compatible container  | Step 4 |
 
-| Service          | Container             |
-| ---------------- | --------------------- |
-| Web              | Next.js               |
-| API              | FastAPI               |
-| Worker           | Python + LangGraph    |
-| Database         | PostgreSQL + pgvector |
-| Queue            | Redis                 |
-| Object storage   | MinIO                 |
-| AI observability | Langfuse              |
-| Metrics          | Prometheus            |
-| Dashboard        | Grafana               |
-
-The API and worker may share Python application code while running as separate processes and containers.
+Langfuse is not in the compose file while the project uses Langfuse Cloud. Self-hosted Langfuse recommends at least 16 GiB of memory for itself, so self-hosting needs more memory or a second machine (ADR-007).
 
 ### 10.2 Execution flow
 
-1. User submits a workflow request from Next.js.
-2. FastAPI validates permissions and request data.
-3. FastAPI creates a workflow execution record.
-4. Execution is dispatched to the background worker.
-5. LangGraph runs the workflow.
-6. State and checkpoint information are persisted.
-7. Observability events are emitted.
-8. Frontend receives progress updates through SSE or WebSocket.
-9. Final results are stored and made available to the user.
+1. A member starts a run in the web application.
+2. FastAPI checks the request, creates the run, and inserts a job row.
+3. The worker polls the jobs table and claims the job.
+4. LangGraph runs the graph, writing a step record and a checkpoint after each step, and sending traces to Langfuse.
+5. At the approval step the graph interrupts. The run waits for approval and the worker is released.
+6. The web application polls the run status every few seconds.
+7. The reviewer submits decisions. FastAPI stores them and inserts a resume job.
+8. The worker resumes the run from its checkpoint, creates the approved Jira Test issues, and records feedback.
+9. The run completes and its results appear in the run list.
 
-### 10.3 Future deployment
+### 10.3 Operations
 
-The architecture should allow migration to cloud infrastructure and horizontal worker scaling without changing the business workflow contracts.
+- Container health checks and logs replace Prometheus and Grafana (ADR-008).
+- Backup of the application database and the document bucket is still to be designed (`OPEN_QUESTIONS.md`). The knowledge base and uploaded documents are the only data that cannot be regenerated.
 
-Do not introduce Kubernetes or other complex infrastructure until actual deployment and scaling requirements justify it.
+### 10.4 Future deployment
+
+The architecture should allow more workers or a move to other infrastructure without changing workflow contracts. Kubernetes, Temporal, and other complex infrastructure are not introduced until a measured need justifies them.
 
 ---
 
-## 11. Proposed Repository Structure
+## 11. Repository Structure
+
+One Next.js application and one Python package with two entry points (ADR-002). The structure below is the target; exact paths are fixed when the code starts.
 
 ```text
 qualiforge-ai/
 ├── apps/
-│   ├── web/                       # Next.js frontend
-│   ├── api/                       # FastAPI application
-│   └── worker/                    # LangGraph worker entrypoint
-│
-├── services/
-│   ├── orchestration/             # Workflow and agent runtime
-│   ├── knowledge/                 # RAG and knowledge services
-│   ├── integrations/              # External system connectors
-│   └── observability/             # Telemetry and usage services
-│
-├── packages/
-│   ├── contracts/                 # API schemas and contracts
-│   ├── prompts/                   # Versioned prompt templates
-│   ├── agent-definitions/         # Agent metadata and configuration
-│   └── workflow-definitions/      # Workflow definitions
-│
-├── infrastructure/
-│   ├── docker/
-│   ├── postgres/
-│   ├── monitoring/
-│   └── scripts/
-│
+│   ├── web/                  # Next.js application
+│   └── api/                  # Python package: API and worker entry points
+│       └── qualiforge/
+│           ├── accounts/
+│           ├── integrations/
+│           ├── runs/
+│           ├── workflows/    # LangGraph graphs and agents
+│           └── knowledge/
 ├── docs/
 │   ├── architecture/
 │   │   ├── ARCHITECTURE.md
 │   │   ├── ARCHITECTURE_DECISIONS.md
-│   │   └── diagrams/
-│   ├── knowledge-system/
-│   ├── agents/
-│   ├── workflows/
-│   ├── api/
-│   └── development/
-│
-├── tests/
-│   ├── integration/
-│   └── e2e/
-│
+│   │   └── OPEN_QUESTIONS.md
+│   ├── development/
+│   ├── prompts/
+│   └── reviews/
 ├── docker-compose.yml
 ├── .env.example
-├── README.md
-└── CONTRIBUTING.md
+└── README.md
 ```
 
-This structure is a proposal. The repository should avoid excessive package splitting before actual reuse requirements emerge.
+Prompts are managed in Langfuse, not in the repository. Agent and workflow definitions are Python code, not separate definition packages.
 
 ---
 
 ## 12. Implementation Roadmap
 
-### Phase 0 — Architecture and Foundation
+The order of work is ADR-020. Each step ends with something a user can see and removes one technical risk.
 
-- Confirm architecture and technology decisions.
-- Define coding standards.
-- Define API contracts.
-- Define core database schema.
-- Establish Docker Compose development environment.
-- Establish CI pipeline.
+| Step                    | Work                                                                                                                                                    | Risk removed                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 1. Baseline             | Trace the existing Claude workflow into Langfuse Cloud. Build the evaluation dataset.                                                                   | Whether the rebuild can be measured.                                                    |
+| 2. Walking skeleton     | Accounts, configuration page, run page, run list, UC-01 on LangGraph, approval, idempotent Jira test creation. Knowledge is the migrated skill content. | Whether the port matches the baseline. Whether checkpoint and approval work end to end. |
+| 3. Feedback loop        | Capture of edits and rejections, review and approval of knowledge items, dataset re-run per release.                                                    | Whether curated knowledge measurably improves output.                                   |
+| 4. Retrieval and upload | Upload and indexing of `.md` and text-based `.pdf` files. Indexing of Confluence and existing tests, starting with duplicate detection.                 | Whether retrieval adds value beyond curated knowledge.                                  |
+| 5. Later                | UC-02, then UC-03 and UC-04, which need an isolated sandbox first.                                                                                      | —                                                                                       |
 
-**Deliverable:** A working development foundation.
+**Gate for step 2:** the LangGraph port scores at least as well as the baseline on the evaluation dataset. If step 1 or this gate fails, the order of work is revisited.
 
-### Phase 1 — Knowledge Foundation
-
-- Implement Jira connector.
-- Implement Confluence connector.
-- Implement Xray connector.
-- Define normalized knowledge model.
-- Implement document parsing and chunking.
-- Implement embeddings.
-- Implement hybrid retrieval.
-- Implement Context Builder.
-- Add permission-aware retrieval.
-- Create retrieval evaluation dataset.
-
-**Deliverable:** A usable Knowledge API that can retrieve relevant information from multiple sources.
-
-### Phase 2 — First AI Workflow
-
-Implement Jira Story → Test Cases → Xray.
-
-- Requirement Analyzer.
-- Knowledge Retriever.
-- Test Designer.
-- Test Reviewer.
-- Human approval.
-- Xray integration.
-- Workflow history and status.
-- Langfuse tracing.
-- Token and cost tracking.
-
-**Deliverable:** A working end-to-end AI testing workflow.
-
-### Phase 3 — Platform Capabilities
-
-- Agent registry.
-- Workflow registry and versioning.
-- Model/provider management.
-- Project and workspace management.
-- Execution dashboard.
-- Cost dashboard.
-- Observability dashboard.
-- Evaluation framework.
-- User and role management.
-
-**Deliverable:** A reusable AI Testing Platform.
-
-### Phase 4 — Advanced Workflows
-
-- Playwright test generation.
-- Unit test generation.
-- Test maintenance and optimization.
-- PR review and test generation.
-- Advanced RAG evaluation.
-- Additional enterprise integrations.
-
-**Deliverable:** Expanded AI-powered Quality Engineering capabilities.
+Step 1 is described in `docs/development/STEP1_BASELINE.md`.
 
 ---
 
-## 13. Non-Goals for the Initial MVP
+## 13. Non-Goals for the MVP
 
-The initial MVP should NOT attempt to:
+The MVP does not:
 
 - Build a general-purpose autonomous AI platform.
-- Implement a custom LLM.
-- Build a vector database.
+- Serve multiple tenants, scale in the cloud, or support more than about 10 users.
+- Implement a custom LLM, a vector database, or an observability engine.
 - Replace Jira, Xray, or Confluence.
-- Build a custom observability engine.
-- Implement a visual no-code workflow builder.
-- Support every LLM provider immediately.
-- Support every testing framework immediately.
-- Introduce complex distributed infrastructure without a concrete need.
+- Build trace, cost, or comparison dashboards that Langfuse already provides.
+- Provide a visual workflow builder, or agent and workflow registries.
+- Build a provider abstraction layer or proxy.
+- Introduce Redis, Prometheus, Grafana, MLflow, Temporal, OpenSearch, or Kubernetes without a measured need.
 
-The initial objective is to prove that a reliable, traceable, and useful AI testing workflow can be delivered.
-
----
-
-## 14. Architecture Decisions and Open Questions
-
-The following topics require review before implementation decisions are finalized.
-
-| ID      | Topic                     | Current proposal             | Status   |
-| ------- | ------------------------- | ---------------------------- | -------- |
-| ADR-001 | Frontend                  | Next.js + TypeScript         | Proposed |
-| ADR-002 | Backend API               | FastAPI                      | Proposed |
-| ADR-003 | Agent orchestration       | LangGraph Python             | Proposed |
-| ADR-004 | Database                  | PostgreSQL + pgvector        | Proposed |
-| ADR-005 | Queue                     | Redis                        | Proposed |
-| ADR-006 | Knowledge retrieval       | Hybrid retrieval + reranking | Proposed |
-| ADR-007 | AI observability          | Langfuse + OpenTelemetry     | Proposed |
-| ADR-008 | Infrastructure monitoring | Prometheus + Grafana         | Proposed |
-| ADR-009 | Object storage            | S3-compatible / MinIO        | Proposed |
-| ADR-010 | Deployment                | Docker Compose initially     | Proposed |
-
-### Questions for architecture review
-
-**A. Architecture and service boundaries**
-
-1. Should the Knowledge System be a separate deployable service or initially a module within the FastAPI application?
-2. Should workflow execution use Redis-based dispatching, or should we evaluate a durable workflow engine such as Temporal?
-3. What should be the boundary between FastAPI business logic and LangGraph orchestration?
-4. How should long-running workflow checkpoints and worker recovery be implemented?
-
-**B. RAG and knowledge**
-
-5. Is PostgreSQL + pgvector sufficient for the expected initial retrieval workload?
-6. Should we introduce a dedicated search engine such as OpenSearch later?
-7. How should we model relationships among Jira stories, Confluence pages, Xray tests, and GitHub code?
-8. How should permission inheritance and document deletion be handled?
-9. How should we evaluate retrieval quality before deploying agents?
-
-**C. Agent architecture**
-
-10. Should agents be implemented as Python modules, independently deployable services, or both depending on workload?
-11. How should agent and workflow definitions be versioned?
-12. How should we prevent unnecessary agent-to-agent delegation?
-13. How should we enforce tool permissions and prevent unsafe external operations?
-
-**D. LLM and observability**
-
-14. Should Langfuse be the primary LLM observability platform?
-15. What is the best strategy to normalize token usage and cost across providers?
-16. Should MLflow be introduced for experiment tracking and evaluation?
-17. How should we manage prompt versions, evaluation datasets, and model comparisons?
-18. How should traces be correlated across API, worker, retrieval, and LLM calls?
-
-**E. Platform and deployment**
-
-19. What authentication and multi-tenancy model should be used?
-20. Should the initial deployment target be a single VM, AWS, or a hybrid environment?
-21. What are the expected concurrency, workflow duration, and data-volume targets?
-22. What are the required backup, disaster recovery, and retention policies?
+The objective is to prove that a reliable, traceable, and useful AI testing workflow can be delivered, and that team knowledge makes it better over time.
 
 ---
 
-## 15. Architecture Review Protocol for AI Assistants
+## 14. Decisions and Open Questions
 
-This document is the shared architecture baseline for all AI assistants working on QualiForge AI.
+- Decisions, with their reasoning and revisit conditions: `docs/architecture/ARCHITECTURE_DECISIONS.md`.
+- Assumptions to validate, items still to design, and the status of every question raised in version 0.1.0: `docs/architecture/OPEN_QUESTIONS.md`.
+- The protocol for AI architecture reviews: `docs/prompts/ARCHITECTURE_REVIEW_PROTOCOL.prompt.md`.
 
-When reviewing this document, assistants should follow these rules:
-
-1. Read the complete architecture document before making recommendations.
-2. Do not silently change existing proposed architecture decisions.
-3. Clearly distinguish confirmed decisions, proposals, assumptions, and open questions.
-4. Challenge decisions when there are concrete technical or operational reasons.
-5. Compare alternatives using maintainability, scalability, complexity, security, cost, and developer experience.
-6. Avoid introducing technologies without explaining the problem they solve.
-7. Prefer the simplest architecture that satisfies the current requirements.
-8. Consider compatibility with the existing repository and implementation constraints.
-9. Identify risks, trade-offs, migration costs, and operational consequences.
-10. Provide references to official documentation for important technical claims.
-11. Do not modify architecture documents or implementation code during a review unless explicitly requested.
-12. Do not assume an architectural proposal is approved merely because it appears in this document.
-
-### Required review output
-
-Each AI assistant should produce:
-
-1. Overall assessment.
-2. Architecture strengths.
-3. Architecture weaknesses and risks.
-4. Recommended changes, with rationale.
-5. Alternative technologies and trade-offs.
-6. Answers to the open architecture questions.
-7. Proposed ADR changes.
-8. A prioritized list of decisions required before implementation.
-
-### Review philosophy
-
-The objective is not to make every AI assistant agree.
-
-The objective is to discover incorrect assumptions, hidden complexity, missing requirements, and better technical alternatives before implementation.
-
-All architecture changes must be explicitly discussed and recorded in `ARCHITECTURE_DECISIONS.md`.
+A change to the architecture is first recorded as a decision, then applied here with a version bump.
 
 ---
 
-## 16. Definition of Architecture Readiness
+## 15. Definition of Architecture Readiness
 
-The architecture is ready for MVP implementation when:
+The architecture reaches version 1.0.0 when every item below is met.
 
-- Core technology decisions have been reviewed.
-- Service responsibilities are clear.
-- Database entities and relationships are defined.
-- Workflow execution lifecycle is defined.
-- Knowledge synchronization and retrieval strategy are defined.
-- Authentication and permission model are defined.
-- LLM provider abstraction is defined.
-- Observability and cost tracking are defined.
-- Deployment and local development environments are documented.
-- MVP acceptance criteria are agreed upon.
+| Criterion                                                | Status  | Where                                         |
+| -------------------------------------------------------- | ------- | --------------------------------------------- |
+| Core technology decisions reviewed                       | Met     | ADR-001 to ADR-010                            |
+| Service responsibilities clear                           | Met     | Section 3                                     |
+| Run lifecycle defined                                    | Met     | Section 6.3                                   |
+| Knowledge and retrieval strategy defined                 | Met     | Section 5, ADR-006, ADR-011                   |
+| Authentication and permission model defined              | Met     | Section 9, ADR-015, ADR-016                   |
+| LLM provider approach defined                            | Met     | ADR-017                                       |
+| Observability and cost tracking defined                  | Met     | Section 8, ADR-007                            |
+| Database entities and relationships defined              | Open    | `OPEN_QUESTIONS.md`                           |
+| Jira Test issue template defined                         | Open    | `OPEN_QUESTIONS.md`                           |
+| MVP acceptance criteria agreed: evaluation pass criteria | Open    | `OPEN_QUESTIONS.md`                           |
+| Deployment, backup, and local development documented     | Partial | Section 10; backup and local development open |
 
 **End of document.**
