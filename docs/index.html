@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>QualiForge AI: overview</title>
+    <meta
+      name="description"
+      content="What QualiForge AI is, what it will do for the QA team, and the plan to build it."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400..800&display=swap"
+    />
+    <link rel="stylesheet" href="assets/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <nav aria-label="Main">
+        <a class="brand" href="index.html">QualiForge AI</a>
+        <a href="index.html" aria-current="page">Overview</a>
+        <a href="architecture.html">Architecture</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <h1>
+            Turn Jira stories into reviewed test cases, and let every review
+            improve the next run.
+          </h1>
+          <p class="lead">
+            QualiForge AI is an internal application for our QA team. AI agents
+            draft test cases from a Jira story. A QA engineer approves, edits or
+            rejects each one, and the approved tests are created in Jira. The
+            corrections are kept as team knowledge, so the agents get better
+            without anyone rewriting prompts.
+          </p>
+          <p class="meta">
+            Stage: design. No platform code has been written yet.<br />
+            Page updated 27 November 2026, from the decisions of 13 November
+            2026.
+          </p>
+        </div>
+
+        <figure class="example" aria-labelledby="example-caption">
+          <p class="example-caption" id="example-caption">
+            An illustrative run. The story and tests are made up.
+          </p>
+          <div class="story">
+            <strong>SHOP-142: Shopper can save a cart for later</strong>
+            Acceptance: saved carts survive logout and expire after 30 days.
+          </div>
+          <p class="flow-down" aria-hidden="true">↓ agents draft tests</p>
+          <ul class="tests">
+            <li>
+              <span>Saved cart is restored after logging back in</span>
+              <span class="state approved">Approved</span>
+            </li>
+            <li>
+              <span>Cart expires after 30 days</span>
+              <span class="state edited">Edited</span>
+              <span class="note"
+                >Reviewer added the boundary case: day 29 vs. day 31.</span
+              >
+            </li>
+            <li>
+              <span>Guest user can save a cart</span>
+              <span class="state rejected">Rejected</span>
+              <span class="note"
+                >Reason: guests cannot save carts in this product.</span
+              >
+            </li>
+          </ul>
+          <p class="flow-down" aria-hidden="true">
+            ↓ the team keeps the lesson
+          </p>
+          <p class="knowledge">
+            Proposed knowledge for the shop project:
+            <strong>Saved carts are for signed-in users only.</strong> Once a
+            reviewer approves it, every later run on this project uses it.
+          </p>
+        </figure>
+      </section>
+
+      <section aria-labelledby="why">
+        <h2 id="why">Why we are building it</h2>
+        <p class="prose">
+          The first workflow already exists. A Claude coding agent with a set of
+          skills turns a Jira story into reviewed test cases today. It works,
+          but only as a personal tool, and it has four limits:
+        </p>
+        <ul class="points">
+          <li>
+            <h3>It runs on one machine</h3>
+            <p>Only the person who set it up can run it.</p>
+          </li>
+          <li>
+            <h3>Nobody can see inside a run</h3>
+            <p>
+              There is no record of what the agent did, why, or what it cost.
+            </p>
+          </li>
+          <li>
+            <h3>Releases cannot be compared</h3>
+            <p>
+              Nothing shows whether a change made the tests better or worse.
+            </p>
+          </li>
+          <li>
+            <h3>Corrections are lost</h3>
+            <p>
+              The only way to improve it is to edit its instructions by hand.
+              What reviewers fix is not kept anywhere.
+            </p>
+          </li>
+        </ul>
+        <p class="prose">
+          QualiForge AI turns that tool into a shared application that fixes all
+          four. The last one, turning corrections into team knowledge, is the
+          main reason the platform exists.
+        </p>
+      </section>
+
+      <section aria-labelledby="features">
+        <h2 id="features">What the first version does</h2>
+        <ul class="points">
+          <li>
+            <h3>Start a run from the browser</h3>
+            <p>Pick a Jira story and start the workflow. No local setup.</p>
+          </li>
+          <li>
+            <h3>Follow every run</h3>
+            <p>
+              See which runs are complete, running or waiting for approval. Open
+              a run to see each step, and follow a link to the full trace with
+              tokens and cost.
+            </p>
+          </li>
+          <li>
+            <h3>Review one test at a time</h3>
+            <p>
+              Edit a test in place, then approve it, reject it, or ask for a new
+              version with feedback. One weak test no longer sinks the whole
+              batch.
+            </p>
+          </li>
+          <li>
+            <h3>Approved tests appear in Jira</h3>
+            <p>
+              Each becomes a Jira Test issue linked to the story, written to one
+              fixed template and labelled with the AI model that wrote it.
+            </p>
+          </li>
+          <li>
+            <h3>A knowledge base the team owns</h3>
+            <p>
+              Edits, rejections and feedback become proposed knowledge items.
+              Once approved, an item is used in later runs for its project or
+              component.
+            </p>
+          </li>
+          <li>
+            <h3>Proof that a release is better</h3>
+            <p>
+              A fixed set of 20 to 30 real stories, with the tests the team
+              accepted, is re-run for every release and scored.
+            </p>
+          </li>
+          <li>
+            <h3>Accounts and roles</h3>
+            <p>
+              Everyone signs in. Administrators manage accounts and the Jira and
+              Confluence connection.
+            </p>
+          </li>
+          <li>
+            <h3>Later: uploads and search</h3>
+            <p>
+              Upload Markdown and text PDF documents, and search Confluence and
+              existing tests, starting with spotting duplicate tests.
+            </p>
+          </li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="run">
+        <h2 id="run">How a run works</h2>
+        <ol class="steps">
+          <li>A QA engineer picks a Jira story and starts a run.</li>
+          <li>
+            The platform fetches the story and adds the approved team knowledge
+            for its project.
+          </li>
+          <li>
+            Three AI agents work in a fixed order: one analyses the requirement,
+            one designs tests, one reviews them. The reviewer can send the tests
+            back at most twice.
+          </li>
+          <li>
+            The run pauses until a QA engineer reviews each test. The pause can
+            last days without holding anything up.
+          </li>
+          <li>
+            Approved tests are created in Jira. A retry never creates a
+            duplicate.
+          </li>
+          <li>
+            Every edit, rejection and piece of feedback becomes a proposed
+            knowledge item.
+          </li>
+        </ol>
+        <p class="prose">
+          The AI agents can only read and draft. They have no way to change
+          Jira; only the final step, after a person approves, writes anything.
+          The <a href="architecture.html#workflow">architecture page</a> shows
+          this as a diagram.
+        </p>
+      </section>
+
+      <section aria-labelledby="roadmap">
+        <h2 id="roadmap">Plan</h2>
+        <p class="prose">
+          Each step ends with something people can use and removes one risk
+          before the next step starts.
+        </p>
+        <ol class="roadmap">
+          <li class="next">
+            <div>
+              <h3>Baseline <span class="tag">Next</span></h3>
+              <p>
+                Record how well today's Claude workflow performs on 20 to 30
+                real stories. Every later release must score at least as well.
+              </p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>Walking skeleton</h3>
+              <p>
+                Accounts, the connection settings page, the run list and run
+                page, the workflow rebuilt on the platform, per-test approval,
+                and safe creation of tests in Jira.
+              </p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>Feedback loop</h3>
+              <p>
+                Reviewer corrections become knowledge items that the team
+                reviews and approves. The story set is re-run for every release.
+              </p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>Uploads and search</h3>
+              <p>
+                Upload documents, and index Confluence and existing tests,
+                starting with duplicate detection.
+              </p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>More workflows</h3>
+              <p>
+                Analysis of existing test cases first. Generating Playwright
+                tests and unit tests comes after, once generated code can run in
+                an isolated sandbox.
+              </p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section aria-labelledby="know">
+        <h2 id="know">What stakeholders should know</h2>
+        <ul class="steps">
+          <li>
+            <strong>Data leaves the internal network.</strong> Story text and
+            generated tests are sent to external AI providers and to Langfuse
+            Cloud, a hosted tracing service in the US. The project owner
+            accepted this on 13 November 2026. Whether company policy allows it
+            is still to be confirmed.
+          </li>
+          <li>
+            <strong>Everyone sees the same Jira and Confluence content.</strong>
+            The platform connects with one shared set of credentials, so every
+            user can see whatever those credentials can see.
+          </li>
+          <li>
+            <strong>It is built by one person.</strong> One SDET, about 20 hours
+            a week, working with AI coding assistants. The design is kept small
+            on purpose.
+          </li>
+          <li>
+            <strong>It runs on one internal server.</strong> 16 GB of memory and
+            100 GB of disk, for a team of 5 to 10 people.
+          </li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="scope">
+        <h2 id="scope">Not part of the first version</h2>
+        <ul class="steps">
+          <li>Use by other companies, or by more than about 10 people.</li>
+          <li>
+            Writing tests through the Xray API, or adding them to Xray test
+            sets. Tests are plain Jira Test issues for now.
+          </li>
+          <li>
+            Company single sign-on. There is no company identity provider yet.
+          </li>
+          <li>Scanned PDFs, which would need text recognition.</li>
+          <li>Generating Playwright or unit test code.</li>
+        </ul>
+        <p class="prose">
+          Each item has a stated condition that would bring it back. See the
+          <a href="architecture.html#deferred">architecture page</a>.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <div>
+        Source documents:
+        <a
+          href="https://github.com/thuongdv/qualiforge-ai/blob/main/docs/architecture/ARCHITECTURE_DECISIONS.md"
+          >Architecture decisions</a
+        >,
+        <a
+          href="https://github.com/thuongdv/qualiforge-ai/blob/main/docs/architecture/ARCHITECTURE.md"
+          >original proposal</a
+        >,
+        <a
+          href="https://github.com/thuongdv/qualiforge-ai/tree/main/docs/reviews"
+          >architecture reviews</a
+        >. Where this page and the decisions document disagree, the decisions
+        document is right.
+      </div>
+    </footer>
+  </body>
+</html>

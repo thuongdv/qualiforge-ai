@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>QualiForge AI: architecture</title>
+    <meta
+      name="description"
+      content="How QualiForge AI is built, the decisions behind it, and what is still open."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400..800&display=swap"
+    />
+    <link rel="stylesheet" href="assets/style.css" />
+    <script type="module" src="assets/diagrams.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <nav aria-label="Main">
+        <a class="brand" href="index.html">QualiForge AI</a>
+        <a href="index.html">Overview</a>
+        <a href="architecture.html" aria-current="page">Architecture</a>
+      </nav>
+    </header>
+
+    <main>
+      <section>
+        <h1>How QualiForge AI is built</h1>
+        <p class="lead">
+          Four services on one internal server, one database, and hosted
+          services for AI models and tracing. The design is sized for a team of
+          10 and a builder with 20 hours a week, and leaves room to grow without
+          a rewrite.
+        </p>
+        <p class="meta">
+          Based on the architecture decisions of 13 November 2026.
+        </p>
+      </section>
+
+      <section aria-labelledby="system">
+        <h2 id="system">The system</h2>
+        <div class="diagram">
+          <pre class="mermaid">
+flowchart TB
+    USER["QA team, 5 to 10 people"]
+
+    subgraph SERVER["One internal server, Docker Compose"]
+        WEB["Web app"]
+        API["API"]
+        WORKER["Worker"]
+        PG[("Database")]
+        S3[("Document storage, step 4")]
+    end
+
+    subgraph EXT["Outside the internal network"]
+        LLM["AI model providers"]
+        LF["Langfuse Cloud tracing"]
+        ATL["Jira and Confluence"]
+    end
+
+    USER --> WEB
+    WEB --> API
+    API -->|"queues runs, reads results"| PG
+    WORKER -->|"picks up runs, saves each step"| PG
+    WORKER -->|"prompts"| LLM
+    WORKER -->|"traces"| LF
+    WORKER -->|"reads stories, creates approved tests"| ATL
+    API -.->|"uploads"| S3
+          </pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Part</th>
+                <th scope="col">What it does</th>
+                <th scope="col">Built with</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Web app</td>
+                <td>
+                  The screens people use: runs, approval, knowledge, settings.
+                  It holds no business logic.
+                </td>
+                <td>Next.js, TypeScript</td>
+              </tr>
+              <tr>
+                <td>API</td>
+                <td>
+                  Sign-in, permissions, and everything the web app asks for. It
+                  queues runs instead of running them.
+                </td>
+                <td>FastAPI, Python</td>
+              </tr>
+              <tr>
+                <td>Worker</td>
+                <td>
+                  Runs the workflows: calls the AI agents, pauses for approval,
+                  writes approved tests to Jira.
+                </td>
+                <td>LangGraph, Python</td>
+              </tr>
+              <tr>
+                <td>Database</td>
+                <td>
+                  Runs, steps, approvals, knowledge items, accounts, and the run
+                  queue. Later also the search index.
+                </td>
+                <td>PostgreSQL with pgvector</td>
+              </tr>
+              <tr>
+                <td>Tracing</td>
+                <td>
+                  The full record of each run: every AI call, tokens, cost, and
+                  the scores used to compare releases.
+                </td>
+                <td>Langfuse Cloud</td>
+              </tr>
+              <tr>
+                <td>Document storage</td>
+                <td>Uploaded documents. Added in step 4.</td>
+                <td>S3-compatible storage</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section aria-labelledby="workflow">
+        <h2 id="workflow">The first workflow: story to tests</h2>
+        <p class="prose">
+          The workflow is a fixed path, not agents deciding among themselves
+          what to do next. Steps that need judgement use AI; steps that touch
+          Jira are plain code.
+        </p>
+        <div class="diagram">
+          <pre class="mermaid">
+flowchart TD
+    PICK(["QA engineer picks a Jira story"])
+    FETCH["Fetch the story from Jira"]
+    KNOW["Add approved team knowledge"]
+    ANALYZE["AI: analyse the requirement"]
+    DESIGN["AI: design tests"]
+    REVIEW["AI: review tests"]
+    OK{"Review passed?"}
+    HUMAN{"QA engineer reviews each test"}
+    CREATE["Create approved tests in Jira"]
+    LEARN["Proposed knowledge items"]
+    DONE(["Run complete"])
+
+    PICK --> FETCH --> KNOW --> ANALYZE --> DESIGN --> REVIEW --> OK
+    OK -->|"No, at most twice"| DESIGN
+    OK -->|"Yes, or with warnings after two tries"| HUMAN
+    HUMAN -->|"Regenerate with feedback"| DESIGN
+    HUMAN -->|"Approved tests"| CREATE
+    HUMAN -.->|"Edits, rejections, feedback"| LEARN
+    CREATE --> DONE
+          </pre>
+        </div>
+      </section>
+
+      <section aria-labelledby="safety">
+        <h2 id="safety">Safeguards</h2>
+        <ul class="steps">
+          <li>
+            <strong>AI cannot change Jira.</strong> The AI agents have no tools
+            that write anything. Only a plain-code step, after a person
+            approves, creates tests. This also defends against instructions
+            hidden in retrieved or uploaded documents.
+          </li>
+          <li>
+            <strong>No duplicate tests.</strong> Each test carries a unique key.
+            If a run is retried, only the tests not yet created are created.
+          </li>
+          <li>
+            <strong>Everyone signs in.</strong> Members and administrators.
+            Without sign-in, anyone on the network could start runs or change
+            stored credentials, and approvals would have no author.
+          </li>
+          <li>
+            <strong>Credentials are protected.</strong> Only administrators can
+            enter Jira and Confluence credentials. They are encrypted, never
+            shown again after saving, and hidden in traces.
+          </li>
+          <li>
+            <strong>Runs stay visible if tracing is down.</strong> Every step is
+            also saved in the database, so the run list and run page work
+            without Langfuse.
+          </li>
+          <li>
+            <strong>Agents cannot loop.</strong> The reviewer can send tests
+            back at most twice, which caps time and cost.
+          </li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="changes">
+        <h2 id="changes">How the design changed after review</h2>
+        <p class="prose">
+          The first proposal described a general platform with nine services.
+          Two independent reviews, by Claude and Gemini, recommended cutting it
+          down to fit the team and the builder. The owner adopted most of the
+          Claude review and selected points from Gemini.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Topic</th>
+                <th scope="col">First proposal</th>
+                <th scope="col">Decided</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Order of work</td>
+                <td>Build the knowledge layer first</td>
+                <td>Rebuild the working workflow first, then add knowledge</td>
+              </tr>
+              <tr>
+                <td>Services</td>
+                <td>Nine, including Redis, Prometheus and Grafana</td>
+                <td>Four: web, API, worker, database</td>
+              </tr>
+              <tr>
+                <td>Run queue</td>
+                <td>Redis</td>
+                <td>A table in the existing database</td>
+              </tr>
+              <tr>
+                <td>Monitoring</td>
+                <td>OpenTelemetry, Prometheus, Grafana</td>
+                <td>Langfuse for AI runs; container health checks and logs</td>
+              </tr>
+              <tr>
+                <td>Where tests go</td>
+                <td>Xray API</td>
+                <td>Jira Test issues with a fixed template</td>
+              </tr>
+              <tr>
+                <td>AI providers</td>
+                <td>A custom layer for many providers</td>
+                <td>One main provider and one fallback, no custom layer</td>
+              </tr>
+              <tr>
+                <td>Team knowledge</td>
+                <td>Not in the proposal</td>
+                <td>Reviewer corrections become approved knowledge items</td>
+              </tr>
+              <tr>
+                <td>Approval</td>
+                <td>Approve or reject the whole batch</td>
+                <td>Approve, edit, regenerate or reject each test</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section aria-labelledby="decisions">
+        <h2 id="decisions">All decisions</h2>
+        <p class="prose">
+          Each decision records a reason and the condition that would make us
+          revisit it. Open one to read it.
+        </p>
+
+        <details>
+          <summary><span>ADR-001</span>Web app built with Next.js</summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                Next.js with TypeScript, used only for screens. It talks to the
+                API through a client generated from the API's specification.
+              </dd>
+              <dt>Why</dt>
+              <dd>
+                A second backend would need to be kept in sync. The generated
+                client breaks the build if the two sides disagree.
+              </dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary><span>ADR-002</span>One Python backend with FastAPI</summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                All Python code in one package, started two ways: as the API and
+                as the worker.
+              </dd>
+              <dt>Why</dt>
+              <dd>
+                One person cannot maintain many packages, and both share the
+                same data models.
+              </dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <span>ADR-003</span>Workflows are fixed paths in LangGraph
+          </summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                Each workflow is a fixed graph. No agent chooses another agent.
+                The reviewer can send tests back at most twice, then the run
+                goes to a person with the reviewer's warnings.
+              </dd>
+              <dt>Why</dt>
+              <dd>
+                A run can wait days for approval without holding a worker. The
+                cap stops agents from looping and spending tokens.
+              </dd>
+              <dt>Revisit when</dt>
+              <dd>
+                The rebuilt workflow scores worse than today's and the gap
+                cannot be closed.
+              </dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary><span>ADR-004</span>One database: PostgreSQL</summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                PostgreSQL holds business data, the search index (pgvector and
+                full-text search), and the workflow engine's internal state,
+                kept in separate tables.
+              </dd>
+              <dt>Why</dt>
+              <dd>One database to run and back up.</dd>
+              <dt>Revisit when</dt>
+              <dd>
+                The index reaches millions of entries or search gets slow.
+              </dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary><span>ADR-005</span>No Redis; the queue is a table</summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                Runs are queued in a database table that one worker checks. The
+                web app refreshes run status every few seconds.
+              </dd>
+              <dt>Why</dt>
+              <dd>Ten users start a few runs at a time.</dd>
+              <dt>Revisit when</dt>
+              <dd>
+                More than about 20 runs happen at once, or the refresh delay
+                becomes a complaint.
+              </dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <span>ADR-006</span>Search is added only where it helps
+          </summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                A known record, such as the selected story, is fetched directly.
+                Search is only for finding related content, from an approved
+                list of Jira projects and Confluence spaces, re-indexed nightly.
+                It is built in step 4, where the measurements show a gap.
+              </dd>
+              <dt>Why</dt>
+              <dd>
+                Shared credentials leave no per-user permissions to filter, and
+                Atlassian Cloud cannot notify a server on the internal network.
+              </dd>
+              <dt>Revisit when</dt>
+              <dd>
+                Teams with different access rights share the platform, or
+                nightly updates are not fresh enough.
+              </dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <span>ADR-007</span>Langfuse Cloud is the only tracing tool
+          </summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                Langfuse Cloud (US region) provides traces, tokens and cost,
+                prompt versions, the evaluation set, and release comparison.
+                Each run links to its trace. Self-hosting is decided later.
+              </dd>
+              <dt>Why</dt>
+              <dd>
+                It already solves two of the three problems the platform exists
+                for. Building the same screens would duplicate it.
+              </dd>
+              <dt>Condition</dt>
+              <dd>
+                Traces contain story text and tests and leave the internal
+                network. Accepted by the owner on 13 November 2026. Self-hosting
+                would need more memory than the current server has.
+              </dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary><span>ADR-008</span>No server dashboards for now</summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                Prometheus and Grafana are deferred. Container health checks and
+                logs are used.
+              </dd>
+              <dt>Revisit when</dt>
+              <dd>
+                Someone other than the builder operates the system, or outages
+                go unnoticed.
+              </dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <span>ADR-009</span>Document upload: Markdown and text PDFs
+          </summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                Uploaded documents go to S3-compatible storage, added in step 4.
+                Markdown and text-based PDFs first. Scanned PDFs are refused
+                with a clear message.
+              </dd>
+              <dt>Revisit when</dt>
+              <dd>Users need scanned documents or other file types.</dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <span>ADR-010</span>Docker Compose on one internal server
+          </summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>The first setup has web, API, worker and database.</dd>
+              <dt>Why</dt>
+              <dd>It matches the server and the team size.</dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <span>ADR-011</span>Reviewer corrections become team knowledge
+          </summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                An edit, rejection or feedback, with its reason, becomes a
+                proposed knowledge item. Approved items are added to later runs
+                for their project or component. Each item records its author,
+                status, version and origin. The existing skills are the starting
+                content.
+              </dd>
+              <dt>Why</dt>
+              <dd>
+                This is the main reason for the platform: corrections should
+                build up as shared knowledge instead of prompt edits.
+              </dd>
+              <dt>Revisit when</dt>
+              <dd>There are too many items to add by project or component.</dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <span>ADR-012</span>Tests are created as Jira Test issues
+          </summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                Each approved test becomes a Jira issue of type Test, linked to
+                the story, with steps in the description in one fixed template.
+                Labels record the platform, AI provider and model; the
+                description records the run and the approver.
+              </dd>
+              <dt>Why</dt>
+              <dd>
+                It avoids a second API in the first version. The fixed template
+                allows a later move to Xray.
+              </dd>
+              <dt>Revisit when</dt>
+              <dd>The team needs Xray test steps or test sets.</dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary><span>ADR-013</span>Approval is per test</summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                Reviewers edit tests in place, choose which to create, and
+                approve, regenerate with feedback, or reject. Both the original
+                and the edited test are kept. Waiting time is not counted in run
+                duration.
+              </dd>
+              <dt>Why</dt>
+              <dd>
+                A yes-or-no for the whole batch forces reviewers to throw away
+                good tests. The stored edits feed team knowledge.
+              </dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <span>ADR-014</span>Only approved, plain-code steps write to Jira
+          </summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                AI steps have no write tools. Each test has a unique key, so a
+                retry creates only what is missing.
+              </dd>
+              <dt>Why</dt>
+              <dd>
+                It is the practical defence against hidden instructions in
+                documents, and against duplicate tests after a restart.
+              </dd>
+              <dt>Revisit when</dt>
+              <dd>Never.</dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary><span>ADR-015</span>Local accounts, two roles</summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                Members and administrators. Administrators can promote others.
+                The last administrator cannot be removed. Sign-in sits behind
+                one function so it can be swapped later.
+              </dd>
+              <dt>Revisit when</dt>
+              <dd>The company provides single sign-on.</dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary><span>ADR-016</span>Jira and Confluence credentials</summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                Entered by administrators on a settings page, encrypted, never
+                shown again, hidden in traces, with a test-connection button.
+                The page warns that every user can see what the credentials can
+                see.
+              </dd>
+              <dt>Revisit when</dt>
+              <dd>Per-user access to Jira and Confluence is required.</dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary><span>ADR-017</span>One AI provider plus a fallback</summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                The standard model interface from the LangGraph ecosystem, with
+                no custom layer or proxy. Cost figures come from Langfuse.
+              </dd>
+              <dt>Revisit when</dt>
+              <dd>Per-team budgets or central key control are needed.</dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <span>ADR-018</span>Today's workflow is the bar to beat
+          </summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                Before rebuilding, the current Claude workflow is traced and
+                scored on 20 to 30 real stories with the tests the team
+                accepted. The rebuild must score at least as well, and the set
+                is re-run for every release.
+              </dd>
+              <dt>Why</dt>
+              <dd>
+                Without it, nobody can show the rebuild is as good as today, or
+                that a release is better than the last.
+              </dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <span>ADR-019</span>Versions come from git and Langfuse
+          </summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                An agent's version is the code commit plus the prompt version,
+                both recorded on each run. No registries yet.
+              </dd>
+              <dt>Revisit when</dt>
+              <dd>Non-developers need to change agents or workflows.</dd>
+            </dl>
+          </div>
+        </details>
+
+        <details>
+          <summary><span>ADR-020</span>Order of work</summary>
+          <div>
+            <dl>
+              <dt>Decision</dt>
+              <dd>
+                Baseline, walking skeleton, feedback loop, uploads and search,
+                then more workflows. See the
+                <a href="index.html#roadmap">plan</a>.
+              </dd>
+              <dt>Why</dt>
+              <dd>
+                Each step ends with something people can use and removes one
+                risk.
+              </dd>
+              <dt>Revisit when</dt>
+              <dd>The baseline or the walking skeleton fails its check.</dd>
+            </dl>
+          </div>
+        </details>
+      </section>
+
+      <section aria-labelledby="deferred">
+        <h2 id="deferred">Deferred</h2>
+        <p class="prose">
+          Not in the first version. Each returns if the condition in its
+          decision is met.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Decision</th>
+                <th scope="col">Item</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>ADR-005</td>
+                <td>Redis</td>
+              </tr>
+              <tr>
+                <td>ADR-006</td>
+                <td>Permission-aware search, live sync, result re-ranking</td>
+              </tr>
+              <tr>
+                <td>ADR-008</td>
+                <td>Prometheus and Grafana</td>
+              </tr>
+              <tr>
+                <td>ADR-009</td>
+                <td>Text recognition for scanned PDFs</td>
+              </tr>
+              <tr>
+                <td>ADR-012</td>
+                <td>Xray API and Xray test sets</td>
+              </tr>
+              <tr>
+                <td>ADR-015</td>
+                <td>Company single sign-on</td>
+              </tr>
+              <tr>
+                <td>ADR-017</td>
+                <td>A custom AI provider layer or proxy</td>
+              </tr>
+              <tr>
+                <td>ADR-019</td>
+                <td>Agent and workflow registries</td>
+              </tr>
+              <tr>
+                <td>ADR-020</td>
+                <td>
+                  Playwright and unit test generation, which need an isolated
+                  sandbox first
+                </td>
+              </tr>
+              <tr>
+                <td>None</td>
+                <td>MLflow, Temporal, OpenSearch, Kubernetes</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section aria-labelledby="open">
+        <h2 id="open">Still open</h2>
+        <div class="prose">
+          <h3>To confirm</h3>
+          <ul>
+            <li>
+              The Langfuse Cloud plan covers our volume, retention and team
+              size.
+            </li>
+            <li>
+              Our Jira project does not require extra fields on Test issues.
+            </li>
+            <li>
+              The workflow engine handles approvals that wait several days.
+            </li>
+            <li>
+              Company policy allows trace content in Langfuse Cloud's US region.
+            </li>
+            <li>Langfuse reports cost correctly for the chosen model.</li>
+          </ul>
+          <h3>To design</h3>
+          <ul>
+            <li>The database schema.</li>
+            <li>The template for Test issue descriptions.</li>
+            <li>The pass mark for the evaluation story set.</li>
+            <li>Backups for the database and uploaded documents.</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div>
+        Source documents:
+        <a
+          href="https://github.com/thuongdv/qualiforge-ai/blob/main/docs/architecture/ARCHITECTURE_DECISIONS.md"
+          >Architecture decisions</a
+        >,
+        <a
+          href="https://github.com/thuongdv/qualiforge-ai/blob/main/docs/architecture/ARCHITECTURE.md"
+          >original proposal</a
+        >,
+        <a
+          href="https://github.com/thuongdv/qualiforge-ai/tree/main/docs/reviews"
+          >architecture reviews</a
+        >. Where this page and the decisions document disagree, the decisions
+        document is right.
+      </div>
+    </footer>
+  </body>
+</html>
